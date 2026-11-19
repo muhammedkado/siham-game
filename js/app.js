@@ -6,7 +6,7 @@
 
   // ——— الحفظ ———
   const DEFAULT = {
-    level: 1, stars: {}, hints: 3, lenses: 3, pics: {}, pack: {}, gifts: [],
+    level: 1, stars: {}, hints: 3, lenses: 3, pics: {}, pack: {}, gifts: [], ad: { wins: 0, last: 0 },
     daily: { last: null, streak: 0 },
     set: { theme: 'light', sound: true, music: true, vibe: true, lang: 'ar', safe: true },
     seen: {},
@@ -22,6 +22,30 @@
   // ——— أدوات ———
   // داخل تطبيق أندرويد: الاهتزاز ولون الأشرطة عبر جسر التطبيق (AndroidBridge)
   const NATIVE = window.AndroidBridge || null;
+  // ——— الإعلانات (داخل تطبيق أندرويد فقط) ———
+  // بانر في شاشات القوائم فقط، إعلان بين المراحل بحد أقصى مرة كل 3 مراحل ودقيقتين،
+  // وإعلانات بمكافأة يختارها اللاعب بنفسه (تلميحات، عدسات، قلب إضافي، هدية الفوز)
+  const ADS = (() => { try { return !!(NATIVE && NATIVE.adsOn && NATIVE.adsOn()); } catch (e) { return false; } })();
+  const Ads = {
+    cbs: {},
+    banner(on) { if (ADS) try { NATIVE.setBanner(!!on); } catch (e) { /* ignore */ } },
+    ready() { if (!ADS) return false; try { return !!NATIVE.rewardedReady(); } catch (e) { return false; } },
+    reward(tag, cb) { if (!ADS) return; Ads.cbs[tag] = cb; try { NATIVE.showRewarded(tag); } catch (e) { delete Ads.cbs[tag]; } },
+    /** يُستدعى عند مغادرة شاشة الفوز */
+    afterWin() {
+      if (!ADS || G.mode === 'gift') return;
+      S.ad.wins = (S.ad.wins || 0) + 1; save();
+      if (S.level < 5 || S.ad.wins < 3 || Date.now() - (S.ad.last || 0) < 120000) return;
+      try { if (NATIVE.interReady()) { NATIVE.interstitial(); S.ad.wins = 0; S.ad.last = Date.now(); save(); } } catch (e) { /* ignore */ }
+    },
+  };
+  window.__adEvent = function (type, tag) {
+    const cb = Ads.cbs[tag];
+    delete Ads.cbs[tag];
+    if (type === 'reward') { S.ad.last = Date.now(); save(); if (cb) cb(); }
+    else if (type === 'failed') toast(t('adFail'));
+  };
+
   function vibrate(ms) {
     if (!S.set.vibe) return;
     try {
@@ -76,6 +100,7 @@
     if (id === 'gallery') renderGallery();
     if (id === 'settings') renderSettings();
     if (id === 'pack') renderPack();
+    Ads.banner(id !== 'game');
     if (id === 'game') requestAnimationFrame(() => engine.resize());
     else { Music.stop(); idleStop(); }
   }
@@ -186,6 +211,9 @@
 
   // ——— الإعدادات ———
   function renderSettings() {
+    let priv = false;
+    try { priv = ADS && NATIVE.privacyRequired(); } catch (e) { /* ignore */ }
+    $('set-privacy').classList.toggle('hidden', !priv);
     $('set-apk').classList.toggle('hidden', !!NATIVE || location.protocol === 'file:');
     document.querySelectorAll('#set-theme button').forEach(b => b.classList.toggle('on', b.dataset.v === S.set.theme));
     document.querySelectorAll('#set-lang button').forEach(b => b.classList.toggle('on', b.dataset.v === S.set.lang));
@@ -199,6 +227,7 @@
     S.set.music = e.target.checked; save();
     Music.setEnabled(S.set.music);
   });
+  $('set-privacy').addEventListener('click', () => { try { NATIVE.privacyOptions(); } catch (e) { /* ignore */ } });
   $('set-vibe').addEventListener('change', e => { S.set.vibe = e.target.checked; save(); vibrate(20); });
   $('set-safe').addEventListener('change', e => { S.set.safe = e.target.checked; save(); engine.safeTap = S.set.safe; });
   $('set-reset').addEventListener('click', () => {
@@ -288,7 +317,7 @@
   }
   function launch(level, hearts, zen) {
     G.level = level; G.usedChance = false; G.combo = 0;
-    G.streak = 0; G.best = 0; G.miss = 0; G.nudge = 0; G.calmShown = false;
+    G.streak = 0; G.best = 0; G.miss = 0; G.nudge = 0; G.calmShown = false; G.adHearts = 0;
     hideCoach(); hideNudge(true); closeModal(); setLensUI(false); clearFx();
     show('game');
     engine.load(level, { hearts, zen });
@@ -482,9 +511,24 @@
   document.querySelector('#game .tools').addEventListener('pointerdown', () => { hideNudge(true); idleArm(); });
   $('nudge').addEventListener('click', () => { hideNudge(true); idleArm(); });
 
+  /** عرض اختياري: شاهد إعلاناً واحصل على أداتين */
+  function offerAd(kind) {
+    modal(`<h3>🎬</h3><p>${t(kind === 'hint' ? 'adHintQ' : 'adLensQ')}</p><div class="m-actions"><button class="btn primary" data-a="watch">${t('watchAd')}</button><button class="btn" data-a="no">${t('no')}</button></div>`, {
+      watch: () => {
+        closeModal();
+        Ads.reward(kind, () => {
+          if (kind === 'hint') S.hints += 2; else S.lenses += 2;
+          save(); updateTools(); Sound.hint();
+          toast(t('adThanks') + (kind === 'hint' ? ' +2 💡' : ' +2 🔍'));
+        });
+      },
+      no: closeModal,
+    });
+  }
+
   $('t-hint').addEventListener('click', () => {
     if (engine.over || engine.won) return;
-    if (G.mode !== 'zen' && S.hints <= 0) { toast(t('noHints')); return; }
+    if (G.mode !== 'zen' && S.hints <= 0) { if (Ads.ready()) offerAd('hint'); else toast(t('noHints')); return; }
     if (!engine.useHint()) { toast(t('noFree')); return; }
     Sound.hint(); vibrate(10);
     if (G.mode !== 'zen') { S.hints--; save(); }
@@ -493,7 +537,7 @@
   $('t-lens').addEventListener('click', () => {
     if (engine.over || engine.won) return;
     if (engine.lensArmed) { setLensUI(false); return; }
-    if (G.mode !== 'zen' && S.lenses <= 0) { toast(t('noLens')); return; }
+    if (G.mode !== 'zen' && S.lenses <= 0) { if (Ads.ready()) offerAd('lens'); else toast(t('noLens')); return; }
     setLensUI(true); Sound.click(); toast(t('lensArmed'));
   });
   $('t-fit').addEventListener('click', () => { engine.fit(true); Sound.click(); });
@@ -537,6 +581,7 @@
     const sub = G.mode === 'daily' ? t('dailyWin') : love ? `${t('loveWin')}: <b style="color:#e5383b">${name}</b>` : `${t('winSub')}: <b>${name}</b>`;
     const flawless = G.mode !== 'zen' && engine.mistakes === 0 ? `<p style="color:var(--ok);font-weight:700;margin-top:-6px">${t('perfect')}</p>` : '';
     const bestLine = G.best >= 3 ? `<p class="m-best">🔥 ${t('bestStreak')}: <b>${G.best}</b></p>` : '';
+    const bonusBtn = !love && Ads.ready() ? `<button class="btn ad-btn" data-a="bonus">${t('adBonus')}</button>` : '';
     const hasNextPack = G.mode === 'pack' && G.pk + 1 < Gen.packPics().length;
     const nextBtn = G.mode === 'journey' || hasNextPack ? `<button class="btn primary" data-a="next">${t('next')} ➜</button>` : G.mode === 'zen' ? `<button class="btn primary" data-a="zen">${t('newZen')}</button>` : '';
     const homeBtn = G.mode === 'pack' || G.mode === 'gift' ? `<button class="btn" data-a="pack">${t('more')} 🐾</button>` : `<button class="btn" data-a="home">${t('home')}</button>`;
@@ -546,8 +591,18 @@
       ${flawless}
       ${bestLine}
       ${rewards.length ? `<div class="m-reward">${t('reward')}: ${rewards.join(' ')}</div>` : ''}
-      <div class="m-actions">${nextBtn}${homeBtn}</div>`,
-    { next: () => G.mode === 'pack' ? startPack(G.pk + 1) : startLevel(G.n + 1), zen: startZen, home: () => { closeModal(); show('home'); }, pack: () => { closeModal(); show('pack'); } });
+      <div class="m-actions">${nextBtn}${bonusBtn}${homeBtn}</div>`,
+    {
+      next: () => { G.mode === 'pack' ? startPack(G.pk + 1) : startLevel(G.n + 1); Ads.afterWin(); },
+      zen: () => { startZen(); Ads.afterWin(); },
+      home: () => { closeModal(); show('home'); Ads.afterWin(); },
+      pack: () => { closeModal(); show('pack'); Ads.afterWin(); },
+      bonus: () => Ads.reward('bonus', () => {
+        S.hints++; S.lenses++; save(); updateTools(); Sound.hint();
+        const b = document.querySelector('#modal [data-a=bonus]');
+        if (b) { b.disabled = true; b.textContent = t('adBonusDone'); }
+      }),
+    });
     document.querySelectorAll('.m-stars .ico.on').forEach((el, i) => { el.style.animationDelay = (0.15 + i * 0.18) + 's'; });
     requestAnimationFrame(() => drawPic($('m-pic'), G.level, 'full'));
   }
@@ -555,10 +610,13 @@
   function onLose() {
     Music.stop(); idleStop();
     Sound.lose();
-    const chance = !G.usedChance ? `<button class="btn heart" data-a="chance">${t('secondChance')}</button>` : '';
+    const chance = !G.usedChance ? `<button class="btn heart" data-a="chance">${t('secondChance')}</button>`
+      : (Ads.ready() && (G.adHearts || 0) < 3 ? `<button class="btn heart" data-a="adheart">${t('adHeart')}</button>` : '');
+    const resume = () => { closeModal(); engine.addHearts(1); updateHud(false, true); Music.start(G.style, G.seed); Music.setProgress(1 - engine.left / engine.total); idleArm(); };
     modal(`<h3>💔</h3><h3 style="font-size:22px">${t('loseTitle')}</h3><p>${t('loseSub')}</p><div class="m-actions">${chance}<button class="btn primary" data-a="retry">${t('tryAgain')}</button><button class="btn" data-a="home">${t('home')}</button></div>`,
       {
-        chance: () => { G.usedChance = true; closeModal(); engine.addHearts(1); updateHud(false, true); Music.start(G.style, G.seed); Music.setProgress(1 - engine.left / engine.total); idleArm(); },
+        chance: () => { G.usedChance = true; resume(); },
+        adheart: () => Ads.reward('heart', () => { G.adHearts = (G.adHearts || 0) + 1; resume(); }),
         retry: restart,
         home: () => { closeModal(); show(exitTo()); },
       }, { locked: true });
