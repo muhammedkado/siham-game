@@ -8,6 +8,7 @@
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const easeOut = t => 1 - Math.pow(1 - t, 3);
+  const HOT = ['#3b82f6', '#9b5de5', '#ff7a1a'];   // ألوان الأسهم أثناء السلسلة
   const easeInOut = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
   class Engine {
@@ -61,7 +62,8 @@
         if (!m(x - 1, y)) { this.edgePath.moveTo(x, y); this.edgePath.lineTo(x, y + 1); }
         if (!m(x + 1, y)) { this.edgePath.moveTo(x + 1, y); this.edgePath.lineTo(x + 1, y + 1); }
       }
-      this.particles = []; this.winFx = null;
+      this.particles = []; this.rings = []; this.sweep = null; this.popFx = null;
+      this.hot = 0; this.lastExitPt = null;
       this.total = this.arrows.length;
       this.left = this.total;
       this.hearts = opts.hearts == null ? 3 : opts.hearts;
@@ -161,6 +163,7 @@
       if (!this.L || this.over || this.won) return;
       const v = this.view;
       const bx = (px - v.ox) / v.s, by = (py - v.oy) / v.s;
+      this._ring(bx, by, 6, 30, 0.42, this.theme.accent, 2, 0.45);
       const cand = this.pick(bx, by);
       const tol = Math.max(0.72, 16 / v.s);
       if (!cand.length || cand[0].d > tol) return;
@@ -202,8 +205,12 @@
       const E = a.pts.slice();
       for (let k = 1; k <= dist + 1; k++) E.push([hp[0] + dx * k, hp[1] + dy * k]);
       const dur = clamp(0.28 + dist * 0.016, 0.34, 0.85);
-      this.anims.push({ type: 'exit', a, E, n, dist, t: 0, dur, revealed: 0 });
+      const cols = a.cells.map(c => this.L.color[c]).filter(Boolean);
+      this.lastExitPt = hp;
+      const an = { type: 'exit', a, E, n, dist, t: 0, dur, revealed: 0, edgeU: toEdge, cols, hot: 0 };
+      this.anims.push(an);
       if (this.h.onExit) this.h.onExit(this.left, this.total);
+      an.hot = this.hot;   // التطبيق يحدّث مستوى السلسلة داخل onExit
       this.kick();
     }
 
@@ -281,6 +288,11 @@
             an.revealed++;
           }
           if (p >= 1) for (const c of an.a.cells) this.target[c] = 1;
+          if (!an.burst && u >= an.edgeU) {
+            an.burst = true;
+            const [dx, dy] = DIRS[an.a.dir], hp = an.a.pts[an.a.pts.length - 1];
+            this._sparks(hp[0] + dx * an.edgeU, hp[1] + dy * an.edgeU, an.a.dir, an.cols, an.hot ? 14 : 9);
+          }
         } else if (an.type === 'bump') {
           const k = 0.42;
           an.u = p < k ? an.m * easeOut(p / k) : an.m * (1 - easeInOut((p - k) / (1 - k)));
@@ -318,12 +330,23 @@
         this.won = true;
         for (let i = 0; i < this.target.length; i++) if (this.L.mask[i]) this.target[i] = 1;
         this.winT = 1.9; busy = true;
-        this.winFx = { t: 0 };
+        this.sweep = { t: 0, dur: 1.1, a: 0.6 };
+        this.popFx = { t: 0, dur: 0.55, amp: 0.045 };
         this._confetti();
       }
-      if (this.winFx) { this.winFx.t += dt; if (this.winFx.t > 1.4) this.winFx = null; else busy = true; }
+      if (this.sweep) { this.sweep.t += dt; if (this.sweep.t > this.sweep.dur + 0.3) this.sweep = null; else busy = true; }
+      if (this.popFx) { this.popFx.t += dt; if (this.popFx.t > this.popFx.dur) this.popFx = null; else busy = true; }
+      if (this.rings.length) {
+        for (const r of this.rings) r.t += dt;
+        this.rings = this.rings.filter(r => r.t < r.dur);
+        busy = true;
+      }
       if (this.particles.length) {
-        for (const p of this.particles) { p.vy += 26 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt; p.life -= dt; }
+        for (const p of this.particles) {
+          if (p.kind) { const d = Math.exp(-p.drag * dt); p.vx *= d; p.vy *= d; p.vy += (p.g || 0) * dt; }
+          else p.vy += 26 * dt;
+          p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt; p.life -= dt;
+        }
         this.particles = this.particles.filter(p => p.life > 0);
         busy = true;
       }
@@ -344,6 +367,11 @@
       const sh = this.shake > 0 ? Math.sin(this.time * 70) * 6 * (this.shake / 0.3) : 0;
       ctx.translate(v.ox + sh, v.oy);
       ctx.scale(v.s, v.s);
+      if (this.popFx) {
+        const p = Math.min(1, this.popFx.t / this.popFx.dur);
+        const k = 1 + this.popFx.amp * Math.sin(Math.PI * p) * (1 - 0.4 * p);
+        ctx.translate(W / 2, H / 2); ctx.scale(k, k); ctx.translate(-W / 2, -H / 2);
+      }
 
       // ظل ناعم تحت الرقعة
       ctx.save();
@@ -415,8 +443,20 @@
         const u = an.u || 0;
         let alpha = 1;
         if (an.type === 'exit') alpha = clamp(1.6 - (u / an.dist) * 1.6 + 0.6, 0, 1);
+        const hc = an.hot ? HOT[Math.min(HOT.length, an.hot) - 1] : null;
+        if (an.type === 'exit' && u > 0.05) {
+          // ذيل حركة خلف السهم (أعرض وملوّن أثناء السلسلة)
+          const L0 = hc ? 3.2 : 1.8, tw = hc ? lw * 2.2 : lw * 1.3;
+          ctx.strokeStyle = hc || th.ink; ctx.lineWidth = tw;
+          for (let k = 0; k < 4; k++) {
+            const a0 = Math.max(0, u - L0 + (L0 * k) / 4), a1 = Math.max(0, u - L0 + (L0 * (k + 1)) / 4);
+            if (a1 - a0 < 0.02) continue;
+            ctx.globalAlpha = alpha * (hc ? 0.11 : 0.05) * (k + 1);
+            strokePoly(ctx, subPath(an.E, a0, a1));
+          }
+        }
         ctx.globalAlpha = alpha;
-        const col = an.type === 'bump' && this.flash.has(an.a.id) ? th.danger : th.ink;
+        const col = an.type === 'bump' && this.flash.has(an.a.id) ? th.danger : (hc || th.ink);
         const sub = subPath(an.E, u, u + an.n);
         this._arrow(sub, an.a.dir, col, lw);
         ctx.globalAlpha = 1;
@@ -424,25 +464,96 @@
       // العدسة
       if (this.lens) this._drawLens(lw);
       // لمعة الفوز تمر على اللوحة
-      if (this.winFx) {
-        const p = Math.min(1, this.winFx.t / 1.1);
+      if (this.sweep) {
+        const p = Math.min(1, this.sweep.t / this.sweep.dur);
         const dx = 0.86, dy = 0.5, Lh = (W + H) * 0.75;
         const cx = W / 2 + dx * (-Lh + 2 * Lh * easeInOut(p)), cy = H / 2 + dy * (-Lh + 2 * Lh * easeInOut(p));
         const g = ctx.createLinearGradient(cx - dx * 3, cy - dy * 3, cx + dx * 3, cy + dy * 3);
-        g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, 'rgba(255,255,255,0.6)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+        g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, 'rgba(255,255,255,' + this.sweep.a + ')'); g.addColorStop(1, 'rgba(255,255,255,0)');
         ctx.save(); ctx.clip(this.maskPath); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); ctx.restore();
       }
-      // قصاصات الاحتفال
+      // حلقات (لمسة / سلسلة)
+      for (const r of this.rings) {
+        const p = r.t / r.dur, e = easeOut(p);
+        ctx.globalAlpha = r.a * (1 - p);
+        ctx.strokeStyle = r.col; ctx.lineWidth = r.w / v.s;
+        ctx.beginPath(); ctx.arc(r.x, r.y, (r.r0 + (r.r1 - r.r0) * e) / v.s, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      // شرارات وقصاصات
       for (const pt of this.particles) {
         ctx.save();
-        ctx.globalAlpha = Math.min(1, pt.life / 0.4);
+        const fade = Math.min(1, pt.life / 0.4);
+        ctx.globalAlpha = fade;
         ctx.translate(pt.x, pt.y); ctx.rotate(pt.rot);
         ctx.fillStyle = pt.c;
-        ctx.fillRect(-pt.s / 2, -pt.s * 0.3, pt.s, pt.s * 0.6);
+        if (pt.kind === 'spark') {
+          const r = pt.s * (0.35 + 0.65 * Math.min(1, pt.life / pt.life0));
+          ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+        } else if (pt.kind === 'star') {
+          const r = pt.s * (0.4 + 0.6 * Math.min(1, pt.life / pt.life0));
+          ctx.beginPath();
+          for (let k = 0; k < 8; k++) {
+            const rr = k % 2 ? r * 0.38 : r, an = (k * Math.PI) / 4;
+            ctx.lineTo(Math.cos(an) * rr, Math.sin(an) * rr);
+          }
+          ctx.closePath(); ctx.fill();
+        } else ctx.fillRect(-pt.s / 2, -pt.s * 0.3, pt.s, pt.s * 0.6);
         ctx.restore();
       }
       ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
+
+    /** حلقة تتوسع (أنصاف الأقطار والسماكة بالبكسل) */
+    _ring(x, y, r0, r1, dur, col, w, a) { this.rings.push({ x, y, r0, r1, dur, col, w, a, t: 0 }); this.kick(); }
+
+    /** شرارات عند خروج السهم من حافة الرقعة، بألوان الخانات التي كشفها */
+    _sparks(x, y, dir, cols, n) {
+      const s = this.view.s, [dx, dy] = DIRS[dir];
+      const base = Math.atan2(dy, dx);
+      for (let i = 0; i < n; i++) {
+        const an = base + (Math.random() - 0.5) * 2.1, sp = (70 + Math.random() * 150) / s;
+        const life = 0.45 + Math.random() * 0.4;
+        this.particles.push({
+          kind: Math.random() < 0.25 ? 'star' : 'spark', x, y,
+          vx: Math.cos(an) * sp, vy: Math.sin(an) * sp, drag: 3.2, g: 0,
+          rot: Math.random() * 6, vr: (Math.random() - 0.5) * 8,
+          s: (1.8 + Math.random() * 2.6) / s, life, life0: life,
+          c: Math.random() < 0.2 ? '#ffffff' : (cols[(Math.random() * cols.length) | 0] || this.theme.accent),
+        });
+      }
+      this.kick();
+    }
+
+    /** احتفال سلسلة صحيحة: نجوم وحلقات عند آخر سهم خرج + نبضة للرقعة */
+    celebrate(tier) {
+      if (!this.L) return;
+      const p = this.lastExitPt || [this.W / 2, this.H / 2];
+      const s = this.view.s;
+      const cols = ['#ffd166', '#ff9f1c', '#ef476f', '#06d6a0', '#4cc9f0', '#9b5de5'];
+      const n = 12 + Math.min(5, tier) * 3;
+      for (let i = 0; i < n; i++) {
+        const an = (i / n) * Math.PI * 2 + Math.random() * 0.3, sp = (120 + Math.random() * 120 + tier * 20) / s;
+        const life = 0.6 + Math.random() * 0.4;
+        this.particles.push({
+          kind: i % 3 ? 'star' : 'spark', x: p[0], y: p[1],
+          vx: Math.cos(an) * sp, vy: Math.sin(an) * sp, drag: 2.6, g: 40 / s,
+          rot: Math.random() * 6, vr: (Math.random() - 0.5) * 10,
+          s: (3 + Math.random() * 3) / s, life, life0: life,
+          c: cols[(i + tier) % cols.length],
+        });
+      }
+      const col = HOT[Math.min(HOT.length - 1, tier >> 1)];
+      this._ring(p[0], p[1], 8, 70 + tier * 10, 0.6, col, 4, 0.8);
+      this._ring(p[0], p[1], 4, 40 + tier * 6, 0.5, '#ffffff', 3, 0.7);
+      this.popFx = { t: 0, dur: 0.32, amp: 0.012 + Math.min(4, tier) * 0.004 };
+      if (tier >= 2) this.sweep = { t: 0, dur: 0.9, a: 0.3 };
+    }
+
+    /** لمعة خفيفة تمر على الرقعة (تنبيه لطيف عند الخمول) */
+    shimmer() { if (this.L && !this.won) { this.sweep = { t: 0, dur: 1.5, a: 0.32 }; this.kick(); } }
+
+    setHot(h) { this.hot = h; }
 
     _confetti() {
       const cols = [];

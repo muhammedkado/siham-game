@@ -149,3 +149,40 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;paddin
   .logo h1{font-size:32px}.logo-mark{width:52px;height:52px}
   .tool-ic{width:52px;height:52px}
 }
+
+/* ——— تفاعل: سلسلة، تنبيهات، مؤثرات ——— */
+.fx{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:4}
+.floater{position:absolute;left:50%;top:26%;transform:translate(-50%,-50%);text-align:center;white-space:nowrap;animation:floatPop 1.25s cubic-bezier(.2,.8,.2,1) forwards;will-change:transform,opacity}
+.floater b{display:block;font-size:44px;font-weight:900;line-height:1.1;letter-spacing:.5px;background:var(--fg,linear-gradient(180deg,#5eead4,#10b981));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 2px 0 rgba(0,0,0,.12));padding:0 6px}
+.floater small{display:inline-block;margin-top:2px;font-size:15px;font-weight:800;color:#fff;background:var(--fs,#10b981);border-radius:999px;padding:3px 12px;box-shadow:0 4px 12px rgba(0,0,0,.15)}
+.floater.t1{--fg:linear-gradient(180deg,#7dd3fc,#3b82f6);--fs:#3b82f6}
+.floater.t2{--fg:linear-gradient(180deg,#d8b4fe,#9b5de5);--fs:#9b5de5}
+.floater.t3{--fg:linear-gradient(180deg,#fdba74,#f43f5e);--fs:#f43f5e}
+.floater.t4{--fg:linear-gradient(180deg,#fde68a,#f59e0b);--fs:#f59e0b}
+.floater.t5 b{background:linear-gradient(90deg,#ef476f,#ffd166,#06d6a0,#118ab2,#9b5de5,#ef476f);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;animation:rainbow .8s linear infinite}
+.floater.t5 small{background:linear-gradient(90deg,#ef476f,#9b5de5)}
+.floater.info{top:30%;animation-duration:1.6s}
+.floater.info b{font-size:22px;background:none;color:var(--ink);background-color:var(--card);-webkit-background-clip:border-box;background-clip:border-box;border-radius:999px;padding:8px 18px;box-shadow:var(--shadow);filter:none}
+@keyframes floatPop{0%{opacity:0;transform:translate(-50%,-50%) scale(.35) rotate(-8deg)}14%{opacity:1;transform:translate(-50%,-50%) scale(1.18) rotate(3deg)}26%{transform:translate(-50%,-50%) scale(.96) rotate(0)}36%{transform:translate(-50%,-50%) scale(1)}78%{opacity:1;transform:translate(-50%,-62%) scale(1)}100%{opacity:0;transform:translate(-50%,-85%) scale(.92)}}
+@keyframes rainbow{to{background-position:200% 0}}
+.glow{position:absolute;inset:0;border-radius:24px;pointer-events:none;opacity:0;z-index:3;background:radial-gradient(ellipse at center,transparent 55%,color-mix(in srgb,var(--gc,#10b981) 22%,transparent) 100%)}
+.glow.on{animation:glowFlash .8s ease-out}
+@keyframes glowFlash{0%{opacity:0}18%{opacity:1}100%{opacity:0}}
+.progress .streak{position:absolute;top:10px;inset-inline-start:auto;inset-inline-end:0;font-size:12.5px;font-weight:800;color:#fff;background:linear-gradient(135deg,#ff9f1c,#ef476f);border-radius:999px;padding:2px 10px;opacity:0;transform:scale(.6);transition:opacity .25s,transform .25s}
+.streak.show{opacity:1;transform:none}
+.streak.bump{animation:streakBump .35s ease}
+.streak.broke{animation:streakBreak .55s ease forwards}
+@keyframes streakBump{40%{transform:scale(1.35)}}
+@keyframes streakBreak{0%{opacity:1;transform:none}25%{transform:translateX(-5px) rotate(-6deg)}50%{transform:translateX(5px) rotate(6deg)}100%{opacity:0;transform:scale(.6)}}
+.hearts .ico.gain{animation:heartGain .7s ease}
+@keyframes heartGain{0%{transform:scale(0)}50%{transform:scale(1.5)}75%{transform:scale(.9)}100%{transform:scale(1)}}
+.nudge{position:absolute;left:50%;bottom:6px;transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:10px;max-width:calc(100% - 24px);width:max-content;background:var(--card);color:var(--ink);border:2px solid color-mix(in srgb,var(--accent) 45%,transparent);border-radius:18px;padding:10px 14px 10px 12px;font:inherit;font-size:14.5px;font-weight:700;line-height:1.45;text-align:start;box-shadow:0 10px 28px rgba(0,0,0,.16);animation:nudgeIn .45s cubic-bezier(.2,1.4,.4,1)}
+.nudge.hidden{display:none}
+.nudge-ic{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 16%,transparent);font-size:17px;animation:nudgeBob 1.6s ease-in-out infinite}
+@keyframes nudgeIn{from{opacity:0;transform:translateX(-50%) translateY(16px) scale(.9)}to{opacity:1;transform:translateX(-50%)}}
+@keyframes nudgeBob{50%{transform:translateY(-3px) rotate(-8deg)}}
+.tool.call .tool-ic{animation:pulse 1s ease 3}
+.m-best{margin:-4px 0 10px;font-weight:700;color:var(--sub)}
+.m-best b{color:#ff7a1a}
+.floater.gone{animation:floatGone .14s ease forwards}
+@keyframes floatGone{to{opacity:0;transform:translate(-50%,-95%) scale(.8)}}

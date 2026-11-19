@@ -67,7 +67,7 @@
     if (id === 'gallery') renderGallery();
     if (id === 'settings') renderSettings();
     if (id === 'game') requestAnimationFrame(() => engine.resize());
-    else Music.stop();
+    else { Music.stop(); idleStop(); }
   }
   document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => { Sound.click(); show(b.dataset.go); }));
 
@@ -155,23 +155,34 @@
   function closeModal() { $('modal').classList.add('hidden'); modalOpen = null; }
 
   // ——— اللعب ———
-  const G = { mode: 'journey', n: 1, level: null, usedChance: false, combo: 0, lastExit: 0, coachStep: 0 };
+  const G = { mode: 'journey', n: 1, level: null, usedChance: false, combo: 0, lastExit: 0, coachStep: 0, streak: 0, best: 0, miss: 0, nudge: 0 };
   const engine = new Engine($('board'), {
     onExit(left, total) {
       const now = performance.now();
       G.combo = now - G.lastExit < 1400 ? G.combo + 1 : 0;
       G.lastExit = now;
+      G.streak++; G.best = Math.max(G.best, G.streak); G.miss = 0; G.nudge = 0;
+      engine.setHot(G.streak >= 12 ? 3 : G.streak >= 8 ? 2 : G.streak >= 5 ? 1 : 0);
       Sound.pop(total - left - 1, total, G.combo);
       Music.setProgress(1 - left / total);
       vibrate(10);
       updateHud();
-      hideCoach();
+      hideCoach(); hideNudge();
+      idleArm();
+      streakFx(left, total);
     },
     onMistake(hearts) {
       Sound.bump(); vibrate([40, 30, 60]);
       G.combo = 0;
+      if (G.streak >= 3) { const sb = $('g-streak'); sb.classList.remove('bump'); sb.classList.add('broke'); }
+      G.streak = 0; engine.setHot(0);
+      G.miss++;
       updateHud(true);
       if (G.mode === 'journey' && G.n === 1 && !S.seen.coach2) { S.seen.coach2 = 1; save(); coach(t('coach2')); }
+      else if (G.miss >= 2 && !G.calmShown && (engine.zen || hearts > 0)) {
+        G.calmShown = true;
+        nudgeShow(G.mode === 'zen' || S.lenses > 0 ? t('calmLens') : t('calm'), '😌', true);
+      }
     },
     onWin, onLose,
     onLens(ok) { Sound.lens(ok); toast(ok ? t('lensClear') : t('lensBlocked')); if (G.mode !== 'zen') { S.lenses--; save(); } setLensUI(false); updateTools(); },
@@ -199,9 +210,11 @@
   }
   function launch(level, hearts, zen) {
     G.level = level; G.usedChance = false; G.combo = 0;
-    hideCoach(); closeModal(); setLensUI(false);
+    G.streak = 0; G.best = 0; G.miss = 0; G.nudge = 0; G.calmShown = false;
+    hideCoach(); hideNudge(true); closeModal(); setLensUI(false); clearFx();
     show('game');
     engine.load(level, { hearts, zen });
+    idleArm();
     const cells = level.mask.reduce((a, b) => a + b, 0);
     const diff = Gen.difficultyOf(cells);
     $('g-diff').textContent = zen ? '🍃' : t(diff);
@@ -219,14 +232,14 @@
     else launch(G.level, 0, true);
   }
 
-  function updateHud(lost) {
+  function updateHud(lost, gained) {
     $('g-left').textContent = engine.left;
     const hb = $('g-hearts');
     if (engine.zen) hb.innerHTML = '<span class="inf">∞</span>';
     else {
       const max = Math.max(3, engine.hearts);
       let h = '';
-      for (let i = 0; i < max; i++) h += icon('i-heart', i < engine.hearts ? '' : 'lost' + (lost && i === engine.hearts ? ' breaking' : ''));
+      for (let i = 0; i < max; i++) h += icon('i-heart', i < engine.hearts ? (gained && i === engine.hearts - 1 ? 'gain' : '') : 'lost' + (lost && i === engine.hearts ? ' breaking' : ''));
       hb.innerHTML = h;
     }
     const pct = Math.round(100 * (1 - engine.left / engine.total));
@@ -244,6 +257,150 @@
   let coachTimer = 0;
   function coach(txt) { const c = $('coach'); c.textContent = txt; c.classList.remove('hidden'); clearTimeout(coachTimer); coachTimer = setTimeout(hideCoach, 6500); }
   function hideCoach() { $('coach').classList.add('hidden'); }
+
+  // ——— التواصل مع اللاعب ———
+  // 1) كلمات طائرة (سلسلة / محطات) — بالدور حتى لا تتراكب
+  const FX = { queue: [], timer: 0 };
+  function floater(html, cls) {
+    // كلمة سلسلة جديدة تلغي كلمة سلسلة أقدم ما زالت تنتظر دورها
+    if (cls !== 'info') FX.queue = FX.queue.filter(q => q.cls === 'info');
+    FX.queue.push({ html, cls });
+    if (!FX.timer) nextFloater();
+  }
+  function nextFloater() {
+    const it = FX.queue.shift();
+    if (!it) { FX.timer = 0; return; }
+    $('fx').querySelectorAll('.floater').forEach(o => o.classList.add('gone'));
+    const el = document.createElement('div');
+    el.className = 'floater ' + (it.cls || '');
+    el.innerHTML = it.html;
+    $('fx').appendChild(el);
+    setTimeout(() => el.remove(), 1900);
+    FX.timer = setTimeout(nextFloater, 720);
+  }
+  function clearFx() {
+    FX.queue = []; clearTimeout(FX.timer); FX.timer = 0; $('fx').innerHTML = '';
+    $('g-streak').className = 'streak'; $('glow').classList.remove('on');
+  }
+  function glow(col) { const g = $('glow'); g.style.setProperty('--gc', col); g.classList.remove('on'); void g.offsetWidth; g.classList.add('on'); }
+
+  // 2) السلسلة: أسهم صحيحة على التوالي بدون خطأ
+  const TIERS = [3, 5, 8, 12, 16, 20, 25, 30];
+  const TCOL = ['#10b981', '#3b82f6', '#9b5de5', '#f43f5e', '#f59e0b', '#ef476f'];
+  function tierOf(n) {
+    const i = TIERS.indexOf(n);
+    if (i >= 0) return i;
+    return n > 30 && n % 10 === 0 ? TIERS.length - 1 + (n - 30) / 10 : -1;
+  }
+  function streakFx(left, total) {
+    const n = G.streak;
+    if (n >= 3) {
+      const sb = $('g-streak');
+      sb.innerHTML = '<bdi dir="ltr">🔥 ×' + n + '</bdi>';
+      sb.className = 'streak show'; void sb.offsetWidth; sb.classList.add('bump');
+    }
+    if (left === 0) return;   // الفوز له احتفاله الخاص
+    let fired = false;
+    const tier = tierOf(n);
+    if (tier >= 0) {
+      fired = true;
+      const k = Math.min(5, tier), words = t('combo');
+      floater(`<b>${words[Math.min(words.length - 1, tier)]}</b><small>${n} ${t('inRow')}</small>`, 't' + k);
+      Sound.combo(Math.min(6, tier));
+      engine.celebrate(tier);
+      glow(TCOL[k]);
+      vibrate([12, 40, 18]);
+      if (n === 5 && !S.seen.streak && !engine.zen) { S.seen.streak = 1; save(); setTimeout(() => nudgeShow(t('coachStreak'), '🔥', true), 900); }
+    }
+    // كل 10 على التوالي ترجع قلباً ضائعاً
+    if (!engine.zen && n % 10 === 0 && engine.hearts < 3) {
+      engine.addHearts(1); updateHud(false, true);
+      floater(`<b>${t('heartGift')}</b>`, 'info');
+      setTimeout(() => Sound.heart(), fired ? 720 : 0);
+      fired = true;
+    }
+    // محطات: نصف اللوحة، آخر سهم
+    const pct = 1 - left / total, prev = 1 - (left + 1) / total;
+    let ms = null;
+    if (total >= 8 && prev < 0.5 && pct >= 0.5) ms = t('half');
+    else if (left === 1 && total >= 5) ms = t('lastOne');
+    if (ms) { floater(`<b>${ms}</b>`, 'info'); setTimeout(() => Sound.milestone(), fired ? 720 : 0); }
+  }
+
+  // 3) تلميح نصي لطيف عند الخمول — يتدرّج: عام ← منطقة ← اتجاه ← اقتراح التلميح
+  let idleTimer = 0, nudgeTimer = 0, nudgeSticky = false;
+  function idleArm() {
+    clearTimeout(idleTimer);
+    if (current !== 'game' || !engine.L || engine.won || engine.over) return;
+    const base = G.mode === 'journey' && G.n <= 2 ? 7000 : G.mode === 'zen' ? 18000 : 11000;
+    idleTimer = setTimeout(idleNudge, base + Math.min(3, G.nudge) * 3500);
+  }
+  function idleStop() { clearTimeout(idleTimer); hideNudge(true); }
+  function idleNudge() {
+    if (current !== 'game' || engine.won || engine.over) return;
+    if (modalOpen || document.hidden || !$('coach').classList.contains('hidden') || engine.anims.length || engine.trace != null) { idleTimer = setTimeout(idleNudge, 2500); return; }
+    const m = nudgeText();
+    if (m) {
+      nudgeShow(m.txt, m.ic);
+      engine.shimmer();
+      if (m.tool) callTool(m.tool);
+    }
+    G.nudge++;
+    idleArm();
+  }
+  function nudgeTarget(free) {
+    const keep = free.find(a => a.id === G.nudgeId);
+    if (keep) return keep;
+    let best = free[0], bs = -1;
+    for (const a of free) {
+      let sc = 0;
+      for (const b of engine.arrows) { if (b.alive && b !== a) { const bl = engine.blockOf(b); if (bl && bl.id === a.id) sc++; } }
+      if (sc > bs) { bs = sc; best = a; }
+    }
+    G.nudgeId = best.id;
+    return best;
+  }
+  function nudgeText() {
+    const free = engine.freeArrows().filter(a => !a.busy);
+    if (!free.length) return null;
+    const st = G.nudge;
+    if (st === 0) {
+      if (free.length === 1) return { txt: t('nudgeOne'), ic: '🔎' };
+      if (free.length === 2) return { txt: t('nudgeTwo'), ic: '👀' };
+      G.tipFlip = !G.tipFlip;
+      if (G.tipFlip) return { txt: t('nudgeCount').replace('{n}', free.length), ic: '👀' };
+      const tips = t('tips');
+      S.tipIdx = ((S.tipIdx || 0) + 1) % tips.length;
+      return { txt: tips[S.tipIdx], ic: '💡' };
+    }
+    const a = nudgeTarget(free);
+    const p = a.pts[a.pts.length - 1];
+    const fx = p[0] / engine.W, fy = p[1] / engine.H;
+    const col = fx < 0.36 ? 0 : fx > 0.64 ? 2 : 1, row = fy < 0.36 ? 0 : fy > 0.64 ? 2 : 1;
+    const r = t('regions')[row * 3 + col];
+    if (st === 1) return { txt: t('nudgeArea').replace('{r}', r), ic: '🧭' };
+    if (st === 3) {
+      if (G.mode === 'zen' || S.hints > 0) return { txt: t('nudgeHint'), ic: '💡', tool: 't-hint' };
+      return { txt: t('nudgeRest'), ic: '😌' };
+    }
+    return { txt: t('nudgeDir').replace('{r}', r).replace('{d}', t('dirs')[a.dir]), ic: '🎯' };
+  }
+  function nudgeShow(txt, ic, sticky) {
+    const n = $('nudge');
+    $('nudge-t').textContent = txt;
+    n.querySelector('.nudge-ic').textContent = ic || '💡';
+    n.classList.remove('hidden');
+    n.style.animation = 'none'; void n.offsetWidth; n.style.animation = '';
+    nudgeSticky = !!sticky;
+    Sound.nudge();
+    clearTimeout(nudgeTimer); nudgeTimer = setTimeout(() => hideNudge(true), sticky ? 6500 : 7500);
+  }
+  function hideNudge(force) { if (force || !nudgeSticky) { $('nudge').classList.add('hidden'); nudgeSticky = false; } }
+  function callTool(id) { const b = $(id); b.classList.remove('call'); void b.offsetWidth; b.classList.add('call'); setTimeout(() => b.classList.remove('call'), 3200); }
+  // أي لمسة = نشاط: نخفي التنبيه ونعيد العدّ
+  $('board').addEventListener('pointerdown', () => { hideNudge(); idleArm(); });
+  document.querySelector('#game .tools').addEventListener('pointerdown', () => { hideNudge(true); idleArm(); });
+  $('nudge').addEventListener('click', () => { hideNudge(true); idleArm(); });
 
   $('t-hint').addEventListener('click', () => {
     if (engine.over || engine.won) return;
@@ -273,9 +430,9 @@
   }
 
   function onWin() {
-    Music.stop();
+    Music.stop(); idleStop();
     Sound.win(); vibrate([20, 40, 20, 40, 60]);
-    const stars = G.mode === 'zen' ? 3 : G.usedChance ? 1 : Math.max(1, engine.hearts);
+    const stars = G.mode === 'zen' ? 3 : G.usedChance ? 1 : Math.max(1, 3 - engine.mistakes);
     S.pics[G.level.pic] = 1;
     const rewards = [];
     if (G.mode === 'journey') {
@@ -294,11 +451,13 @@
     const name = G.level.picName[S.set.lang];
     const sub = G.mode === 'daily' ? t('dailyWin') : `${t('winSub')}: <b>${name}</b>`;
     const flawless = G.mode !== 'zen' && engine.mistakes === 0 ? `<p style="color:var(--ok);font-weight:700;margin-top:-6px">${t('perfect')}</p>` : '';
+    const bestLine = G.best >= 3 ? `<p class="m-best">🔥 ${t('bestStreak')}: <b>${G.best}</b></p>` : '';
     const nextBtn = G.mode === 'journey' ? `<button class="btn primary" data-a="next">${t('next')} ➜</button>` : G.mode === 'zen' ? `<button class="btn primary" data-a="zen">${t('newZen')}</button>` : '';
     modal(`<h3>${t('winTitle')}</h3><p>${sub}</p>
       <canvas id="m-pic"></canvas>
       ${G.mode === 'zen' ? '' : `<div class="m-stars">${[1, 2, 3].map(i => icon('i-star', i <= stars ? 'on' : '')).join('')}</div>`}
       ${flawless}
+      ${bestLine}
       ${rewards.length ? `<div class="m-reward">${t('reward')}: ${rewards.join(' ')}</div>` : ''}
       <div class="m-actions">${nextBtn}<button class="btn" data-a="home">${t('home')}</button></div>`,
     { next: () => startLevel(G.n + 1), zen: startZen, home: () => { closeModal(); show('home'); } });
@@ -307,12 +466,12 @@
   }
 
   function onLose() {
-    Music.stop();
+    Music.stop(); idleStop();
     Sound.lose();
     const chance = !G.usedChance ? `<button class="btn heart" data-a="chance">${t('secondChance')}</button>` : '';
     modal(`<h3>💔</h3><h3 style="font-size:22px">${t('loseTitle')}</h3><p>${t('loseSub')}</p><div class="m-actions">${chance}<button class="btn primary" data-a="retry">${t('tryAgain')}</button><button class="btn" data-a="home">${t('home')}</button></div>`,
       {
-        chance: () => { G.usedChance = true; closeModal(); engine.addHearts(1); updateHud(); Music.start(G.style, G.seed); Music.setProgress(1 - engine.left / engine.total); },
+        chance: () => { G.usedChance = true; closeModal(); engine.addHearts(1); updateHud(false, true); Music.start(G.style, G.seed); Music.setProgress(1 - engine.left / engine.total); idleArm(); },
         retry: restart,
         home: () => { closeModal(); show('home'); },
       }, { locked: true });
@@ -331,7 +490,7 @@
   };
 
   // للاختبار
-  window.__siham = { engine, G, S, startLevel, startDaily, startZen };
+  window.__siham = { engine, G, S, startLevel, startDaily, startZen, idleNudge };
 
   applyI18n(); applyTheme(); show('home');
 })();

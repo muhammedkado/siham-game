@@ -76,6 +76,17 @@
     src.start(t, Math.random() * 0.5); src.stop(t + dur + 0.02);
   }
 
+  /** نفخة هواء صاعدة (ضجيج بفلتر يتحرّك) */
+  function whoosh(t, dur, vol) {
+    const src = ctx.createBufferSource(); src.buffer = noiseBuf;
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.4;
+    f.frequency.setValueAtTime(500, t); f.frequency.exponentialRampToValueAtTime(5000, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + dur * 0.6); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f); f.connect(g); g.connect(sfxBus);
+    src.start(t, Math.random() * 0.3); src.stop(t + dur + 0.02);
+  }
+
   // ===================== المؤثرات =====================
   const Sound = {
     setEnabled(v) { sfxOn = v; },
@@ -131,6 +142,50 @@
       if (!sfxOn || !ac()) return; const t = ctx.currentTime + 0.1;
       [0, 4, 7, 12, 16].forEach((s, i) => voice(sfxBus, mtof(key + s), t + i * 0.09, 0.45, 'triangle', 0.14));
       [0, 7, 12, 16].forEach(s => voice(sfxBus, mtof(key + s), t + 0.5, 1.2, 'sine', 0.05, { attack: 0.05 }));
+    },
+    /** نغمة السلسلة: أربيجيو صاعد يطول ويعلو مع كل مستوى + لمعات + كورد ختامي */
+    combo(tier) {
+      if (!sfxOn || !ac()) return;
+      const t = ctx.currentTime + 0.08;
+      const steps = [0, 4, 7, 12, 16, 19, 24, 28, 31];
+      const n = Math.min(steps.length, 4 + tier);
+      const base = key + (tier >= 3 ? 12 : 0);
+      const gap = Math.max(0.04, 0.062 - tier * 0.004);
+      for (let i = 0; i < n; i++) {
+        const f = mtof(base + steps[i]);
+        voice(sfxBus, f, t + i * gap, 0.32, 'triangle', 0.07);
+        voice(sfxBus, f * 2, t + i * gap + 0.01, 0.22, 'sine', 0.025);
+      }
+      const end = t + n * gap;
+      // كورد ختامي ناعم
+      [0, 7, 12, 16].forEach((s, i) => voice(sfxBus, mtof(base + 12 + s), end + i * 0.012, 0.9, 'sine', 0.04, { attack: 0.015 }));
+      // لمعات عشوائية من السلّم الخماسي
+      for (let i = 0; i < 3 + tier; i++) {
+        const m = base + 24 + PENTA[(Math.random() * 5) | 0] + 12 * ((Math.random() * 2) | 0);
+        voice(sfxBus, mtof(m), end + 0.05 + i * 0.045 + Math.random() * 0.02, 0.18, 'sine', 0.022);
+      }
+      if (tier >= 2) whoosh(t - 0.04, 0.45 + tier * 0.04, 0.05 + tier * 0.01);
+    },
+    /** قلب هدية */
+    heart() {
+      if (!sfxOn || !ac()) return; const t = ctx.currentTime + 0.05;
+      [12, 16, 19, 24].forEach((s, i) => voice(sfxBus, mtof(key + s), t + i * 0.07, 0.4, 'sine', 0.09));
+      voice(sfxBus, mtof(key + 36), t + 0.3, 0.6, 'sine', 0.03, { attack: 0.02 });
+    },
+    /** تنبيه لطيف عند الخمول */
+    nudge() {
+      if (!sfxOn || !ac()) return; const t = ctx.currentTime;
+      voice(sfxBus, mtof(key + 19), t, 0.18, 'sine', 0.05);
+      voice(sfxBus, mtof(key + 24), t + 0.12, 0.28, 'sine', 0.05);
+    },
+    /** محطة (نصف اللوحة / آخر سهم) */
+    milestone() {
+      if (!sfxOn || !ac()) return; const t = ctx.currentTime + 0.12;
+      [7, 12, 16].forEach((s, i) => {
+        const f = mtof(key + 12 + s);
+        voice(sfxBus, f, t + i * 0.08, 0.5, 'sine', 0.06);
+        voice(sfxBus, f * 3, t + i * 0.08, 0.2, 'sine', 0.012);
+      });
     },
     lose() {
       if (!sfxOn || !ac()) return; const t = ctx.currentTime;
