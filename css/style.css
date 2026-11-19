@@ -186,3 +186,19 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;paddin
 .m-best b{color:#ff7a1a}
 .floater.gone{animation:floatGone .14s ease forwards}
 @keyframes floatGone{to{opacity:0;transform:translate(-50%,-95%) scale(.8)}}
+
+/* ——— حيوانات من أسهم ——— */
+.mode-row{grid-template-columns:repeat(3,1fr);gap:10px}
+.mode-card{padding:12px 6px;font-size:15.5px}
+.mode-card small{font-size:11.5px;text-align:center}
+.pack-card .ico{color:#f28c38}
+.pack-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.pk{background:var(--card);border-radius:20px;box-shadow:var(--shadow);padding:12px 10px 10px;display:flex;flex-direction:column;align-items:center;gap:6px;font-weight:800;font-size:15px}
+.pk canvas{width:100%;aspect-ratio:1}
+.pk .st{display:flex;gap:2px}
+.pk .st .ico{width:14px;height:14px;color:var(--cell)}
+.pk .st .ico.on{color:var(--gold)}
+.pk.love{grid-column:1/-1;background:linear-gradient(135deg,#ffe3ea,#fff4f6);border:2px solid #ff8fab;color:#c9184a;font-size:18px}
+body[data-theme=dark] .pk.love{background:linear-gradient(135deg,#3d1d2b,#2a1a24);color:#ff8fab}
+.pk.love canvas{width:58%}
+.gift-name{color:#e5383b;font-size:26px;margin:4px 0 8px}

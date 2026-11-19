@@ -56,7 +56,12 @@
 
   /** يملأ الرقعة بالأسهم */
   function fill(board, params, seed) {
-    const { W, H, mask } = board;
+    const { W, H } = board;
+    const col = board.color;
+    // في وضع الرسم بالأسهم: الحدود والتفاصيل ثابتة، والأسهم تملأ المساحات الملوّنة فقط
+    const mask = params.lock && board.fixed ? board.mask.map((m, i) => m && !board.fixed[i] ? 1 : 0) : board.mask;
+    // وضع "اللوحة من أسهم": كل سهم بلون واحد فقط، فالأسهم نفسها ترسم الصورة
+    const same = params.lock ? (a, b) => col[a] === col[b] : () => true;
     const R = rng(seed);
     const occ = new Int32Array(W * H).fill(-1);
     // rayMax[c] = أكبر رقم سهم يمر طريق خروجه بالخانة c
@@ -71,7 +76,7 @@
       return minLen + Math.floor(u * (maxLen - minLen + 1));
     }
 
-    function tryPlace(h, d, targetLen) {
+    function tryPlace(h, d, targetLen, allowSingle) {
       const hx = h % W, hy = (h / W) | 0;
       const [dx, dy] = DIRS[d];
       // 1) طريق الخروج يجب أن يكون خالياً
@@ -85,9 +90,16 @@
       }
       // 2) الخانة خلف الرأس مباشرة
       const bx = hx - dx, by = hy - dy;
-      if (!inG(bx, by)) return false;
       const b = by * W + bx;
-      if (!mask[b] || occ[b] >= 0) return false;
+      if (!inG(bx, by) || !mask[b] || occ[b] >= 0 || !same(b, h)) {
+        if (!allowSingle) return false;
+        // سهم من خانة واحدة (لتفاصيل صغيرة مثل العيون)
+        const id = arrows.length;
+        occ[h] = id;
+        for (const c of ray) rayMax[c] = id;
+        arrows.push({ id, cells: [h], dir: d });
+        return true;
+      }
       const path = [h, b];
       const used = new Set(path);
       let px = bx, py = by, wd = (d + 2) % 4;
@@ -100,7 +112,7 @@
           const nx = px + DIRS[nd][0], ny = py + DIRS[nd][1];
           if (!inG(nx, ny)) continue;
           const ni = ny * W + nx;
-          if (!mask[ni] || occ[ni] >= 0 || used.has(ni) || ray.has(ni)) continue;
+          if (!mask[ni] || occ[ni] >= 0 || used.has(ni) || ray.has(ni) || !same(ni, h)) continue;
           path.push(ni); used.add(ni); px = nx; py = ny; wd = nd; moved = true;
           break;
         }
@@ -130,7 +142,7 @@
           const o = occ[ny * W + nx];
           if (o < 0) continue;
           const a = arrows[o];
-          if (a.cells[0] !== ny * W + nx || a.cells.length >= maxExt || rayMax[c] >= o) continue;
+          if (a.cells[0] !== ny * W + nx || a.cells.length >= maxExt || rayMax[c] >= o || !same(c, a.cells[0])) continue;
           opts.push(a);
         }
         if (!opts.length) continue;
@@ -149,7 +161,9 @@
         if (occ[h] >= 0) continue;
         const dirs = shuffle([0, 1, 2, 3], R);
         const L = pass < 3 ? sampleLen() : 2 + Math.floor(R() * 3);
-        for (const d of dirs) { if (tryPlace(h, d, L)) { placed++; break; } }
+        let ok = false;
+        for (const d of dirs) { if (tryPlace(h, d, L, false)) { placed++; ok = true; break; } }
+        if (!ok && params.single && pass >= 2) for (const d of dirs) { if (tryPlace(h, d, 1, true)) { placed++; break; } }
       }
       const grown = pass >= 1 ? extendPass() + extendPass() : 0;
       if (!placed && !grown) break;
@@ -190,9 +204,9 @@
   }
 
   function makeLevel(spec) {
-    const pic = PICS.PICTURES.find(p => p.id === spec.pic) || PICS.PICTURES[0];
-    const board = buildBoard(pic, spec.w || spec.f, spec.mirror);
-    const cellsInMask = board.mask.reduce((s, v) => s + v, 0);
+    const pic = spec.board ? null : (PICS.PICTURES.find(p => p.id === spec.pic) || PICS.PICTURES[0]);
+    const board = spec.board || buildBoard(pic, spec.w || spec.f, spec.mirror);
+    const cellsInMask = Math.max(1, board.mask.reduce((s, v, i) => s + (v && !(spec.lock && board.fixed && board.fixed[i]) ? 1 : 0), 0));
     let best = null;
     const tries = spec.tries || 4;
     for (let t = 0; t < tries; t++) {
@@ -208,8 +222,8 @@
       if (!best || score > best.score) best = { score, arrows, fillRatio, an };
     }
     return {
-      W: board.W, H: board.H, mask: board.mask, color: board.color,
-      arrows: best.arrows, pic: pic.id, picName: pic.name,
+      W: board.W, H: board.H, mask: board.mask, color: board.color, fixed: board.fixed,
+      arrows: best.arrows, pic: pic ? pic.id : spec.id, picName: pic ? pic.name : spec.name, art: !!spec.art,
       fillRatio: best.fillRatio, layers: best.an.layers, spec,
     };
   }
@@ -266,7 +280,20 @@
     return Object.assign({ zen: true, pic: pic.id, w, mirror: R() < 0.5, seed: seedNum }, arrowParams(w, 8));
   }
 
-  const api = { DIRS, rng, hashStr, buildBoard, fill, firstBlock, analyze, makeLevel, levelSpec, dailySpec, zenSpec, difficultyOf, mainPics };
+  // ——— حزمة "حيوانات من أسهم": الأسهم ملوّنة وترسم الحيوان بنفسها ———
+  const artParams = w => ({ minLen: 2, maxLen: Math.min(16, Math.round(w * 0.5)), straight: 0.45, lenBias: 0.7, lock: true, single: true, art: true });
+  function packPics() { return PICS.packPics('animals'); }
+  function packSpec(i) {
+    const pic = packPics()[i];
+    const w = pic.w || 24;
+    return Object.assign({ pack: i, pic: pic.id, w, seed: hashStr('siham-pack-' + pic.id), tries: 3 }, artParams(w));
+  }
+  /** خريطة خاصة من رابط هدية: الرقعة جاهزة */
+  function customSpec(g) {
+    return Object.assign({ custom: g.id, id: g.id, name: { ar: g.name, en: g.name }, board: g.board, seed: hashStr('siham-gift-' + g.id), tries: 3, love: true }, artParams(g.board.W));
+  }
+
+  const api = { DIRS, rng, hashStr, buildBoard, fill, firstBlock, analyze, makeLevel, levelSpec, dailySpec, zenSpec, difficultyOf, mainPics, packPics, packSpec, customSpec };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Gen = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -37,17 +37,19 @@
     load(level, opts) {
       opts = opts || {};
       this.L = level;
+      this.art = !!level.art;   // وضع "اللوحة من أسهم": كل سهم بلون الرسمة تحته
       const W = this.W = level.W, H = this.H = level.H;
       this.occ = new Int32Array(W * H).fill(-1);
       this.arrows = level.arrows.map(a => {
         const pts = a.cells.map(c => [(c % W) + 0.5, ((c / W) | 0) + 0.5]);
-        return { id: a.id, cells: a.cells, dir: a.dir, pts, alive: true, busy: false };
+        return { id: a.id, cells: a.cells, dir: a.dir, pts, alive: true, busy: false, cols: a.cells.map(c => level.color[c] || '#8890a0') };
       });
       for (const a of this.arrows) for (const c of a.cells) this.occ[c] = a.id;
       this.reveal = new Float32Array(W * H);
       this.target = new Float32Array(W * H);
       for (let i = 0; i < W * H; i++) {
-        if (level.mask[i] && this.occ[i] < 0) { this.reveal[i] = 0; this.target[i] = 0; }
+        // في وضع الرسم بالأسهم: الخانات القليلة بدون أسهم تظهر بلونها من البداية حتى تكتمل الرسمة
+        if (level.mask[i] && this.occ[i] < 0) { const v = this.art ? 1 : 0; this.reveal[i] = v; this.target[i] = v; }
       }
       // مسار شكل الرقعة وحدودها (للظل والإطار)
       this.maskPath = new Path2D();
@@ -383,10 +385,11 @@
       ctx.fillStyle = th.cell;
       ctx.fill(this.maskPath);
       // اللوحة: طيف خفيف تحت الأسهم + الخانات المكشوفة بألوانها الكاملة
-      const ghost = th.ghost == null ? 0.13 : th.ghost;
+      const ghost = this.art ? 0.3 : th.ghost == null ? 0.13 : th.ghost;
       for (let i = 0; i < W * H; i++) {
         if (!L.mask[i]) continue;
         const r = Math.max(ghost, this.reveal[i]);
+        if (r <= 0.001) continue;
         const x = i % W, y = (i / W) | 0;
         ctx.globalAlpha = Math.min(1, r);
         ctx.fillStyle = L.color[i];
@@ -411,7 +414,7 @@
       ctx.fillStyle = th.dot || th.ink;
       ctx.globalAlpha = 0.16;
       for (let i = 0; i < W * H; i++) {
-        if (!L.mask[i] || this.occ[i] >= 0 || this.reveal[i] > FADE + 0.05) continue;
+        if (this.art || !L.mask[i] || this.occ[i] >= 0 || this.reveal[i] > FADE + 0.05) continue;
         const x = i % W, y = (i / W) | 0;
         ctx.beginPath(); ctx.arc(x + 0.5, y + 0.5, 0.07, 0, Math.PI * 2); ctx.fill();
       }
@@ -423,7 +426,8 @@
       const pulse = 0.5 + 0.5 * Math.sin(this.time * 7);
 
       // الأسهم الثابتة
-      for (const a of this.arrows) {
+      if (this.art) this._artArrows(v, animIds, pulse);
+      else for (const a of this.arrows) {
         if (!a.alive || animIds.has(a.id)) continue;
         let col = th.ink, w = lw;
         if (this.flash.has(a.id)) col = th.danger;
@@ -456,6 +460,11 @@
           }
         }
         ctx.globalAlpha = alpha;
+        if (this.art) {
+          this._artMoving(an, u, v, an.type === 'bump' && this.flash.has(an.a.id) ? th.danger : null);
+          ctx.globalAlpha = 1;
+          continue;
+        }
         const col = an.type === 'bump' && this.flash.has(an.a.id) ? th.danger : (hc || th.ink);
         const sub = subPath(an.E, u, u + an.n);
         this._arrow(sub, an.a.dir, col, lw);
@@ -498,6 +507,13 @@
             ctx.lineTo(Math.cos(an) * rr, Math.sin(an) * rr);
           }
           ctx.closePath(); ctx.fill();
+        } else if (pt.shape === 'heart') {
+          const r = pt.s * 0.5;
+          ctx.rotate(-pt.rot + Math.sin(pt.rot) * 0.4);
+          ctx.beginPath();
+          ctx.arc(-r * 0.48, -r * 0.15, r * 0.52, Math.PI, 0);
+          ctx.arc(r * 0.48, -r * 0.15, r * 0.52, Math.PI, 0);
+          ctx.lineTo(0, r * 0.95); ctx.closePath(); ctx.fill();
         } else ctx.fillRect(-pt.s / 2, -pt.s * 0.3, pt.s, pt.s * 0.6);
         ctx.restore();
       }
@@ -556,8 +572,10 @@
     setHot(h) { this.hot = h; }
 
     _confetti() {
-      const cols = [];
+      const love = this.L.spec && this.L.spec.love;
+      let cols = [];
       for (let i = 0; i < this.L.color.length; i++) if (this.L.color[i]) cols.push(this.L.color[i]);
+      if (love) cols = ['#e5383b', '#ff4d6d', '#ff8fab', '#ffb3c1', '#c9184a'];
       const k = Math.max(this.W, this.H);
       for (let i = 0; i < 70; i++) {
         const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2, sp = (0.5 + Math.random() * 0.7) * k * 1.1;
@@ -565,8 +583,8 @@
           x: this.W / 2 + (Math.random() - 0.5) * this.W * 0.3, y: this.H * 0.55,
           vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
           rot: Math.random() * 6, vr: (Math.random() - 0.5) * 14,
-          s: k * (0.025 + Math.random() * 0.025), life: 1.4 + Math.random() * 0.8,
-          c: cols[(Math.random() * cols.length) | 0] || '#ffd166',
+          s: k * (love ? 0.045 + Math.random() * 0.03 : 0.025 + Math.random() * 0.025), life: 1.4 + Math.random() * 0.8,
+          c: cols[(Math.random() * cols.length) | 0] || '#ffd166', shape: love ? 'heart' : null,
         });
       }
     }
@@ -587,6 +605,100 @@
       ctx.closePath();
       ctx.lineWidth = lw * 0.6;
       ctx.fill(); ctx.stroke();
+    }
+
+    // ——— رسم الأسهم الملوّنة (أنبوب بلون الرسمة + حافة أغمق) ———
+    _artW(v) { return { tw: Math.max(0.34, 2.4 / v.s), ow: Math.max(0.06, 1 / v.s) }; }
+
+    _artArrows(v, animIds, pulse) {
+      const ctx = this.ctx, th = this.theme;
+      const { tw, ow } = this._artW(v);
+      const fills = new Map(), edges = new Map(), special = [];
+      const get = (m, k) => { let p = m.get(k); if (!p) { p = new Path2D(); m.set(k, p); } return p; };
+      const seg = (c, x0, y0, x1, y1) => {
+        const f = get(fills, c), e = get(edges, edgeOf(c));
+        f.moveTo(x0, y0); f.lineTo(x1, y1); e.moveTo(x0, y0); e.lineTo(x1, y1);
+      };
+      const ln = this.lens;
+      for (const a of this.arrows) {
+        if (!a.alive || animIds.has(a.id)) continue;
+        if (this.flash.has(a.id) || this.trace === a.id || (this.hint && this.hint.id === a.id) || (ln && (ln.id === a.id || (ln.block && ln.block.id === a.id)))) { special.push(a); continue; }
+        const p = a.pts, n = p.length;
+        if (n === 1) { const [dx, dy] = DIRS[a.dir]; seg(a.cols[0], p[0][0] - dx * 0.3, p[0][1] - dy * 0.3, p[0][0], p[0][1]); continue; }
+        for (let i = 0; i < n; i++) {
+          const [x, y] = p[i];
+          if (i > 0) seg(a.cols[i], x, y, (x + p[i - 1][0]) / 2, (y + p[i - 1][1]) / 2);
+          if (i < n - 1) seg(a.cols[i], x, y, (x + p[i + 1][0]) / 2, (y + p[i + 1][1]) / 2);
+        }
+      }
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.lineWidth = tw + ow * 2;
+      for (const [c, path] of edges) { ctx.strokeStyle = c; ctx.stroke(path); }
+      ctx.lineWidth = tw;
+      for (const [c, path] of fills) { ctx.strokeStyle = c; ctx.stroke(path); }
+      const sp = new Set(special);
+      for (const a of this.arrows) {
+        if (!a.alive || animIds.has(a.id) || sp.has(a)) continue;
+        const c = a.cols[a.cols.length - 1];
+        this._artHead(a.pts[a.pts.length - 1], a.dir, tw, ow, c, edgeOf(c));
+      }
+      // أسهم بحالة خاصة (خطأ، تتبّع، تلميح، عدسة) بلون موحّد واضح
+      for (const a of special) {
+        let col = th.accent;
+        if (this.flash.has(a.id)) col = th.danger;
+        if (ln && ln.block && ln.block.id === a.id) col = th.danger;
+        if (ln && ln.id === a.id) col = ln.block ? th.danger : th.ok;
+        if (this.hint && this.hint.id === a.id) {
+          ctx.strokeStyle = th.accent; ctx.globalAlpha = 0.25 + 0.3 * pulse; ctx.lineWidth = tw * 2.6;
+          strokePoly(ctx, a.pts.length > 1 ? a.pts : [a.pts[0], a.pts[0]]);
+          ctx.globalAlpha = 1;
+        }
+        this._artUniform(a.pts, a.dir, col, tw, ow);
+      }
+    }
+
+    _artUniform(pts, dir, col, tw, ow) {
+      const ctx = this.ctx, e = edgeOf(col);
+      if (pts.length === 1) { const [dx, dy] = DIRS[dir]; pts = [[pts[0][0] - dx * 0.3, pts[0][1] - dy * 0.3], pts[0]]; }
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.strokeStyle = e; ctx.lineWidth = tw + ow * 2; strokePoly(ctx, pts);
+      ctx.strokeStyle = col; ctx.lineWidth = tw; strokePoly(ctx, pts);
+      this._artHead(pts[pts.length - 1], dir, tw, ow, col, e);
+    }
+
+    _artHead(p, dir, tw, ow, fill, edge) {
+      const ctx = this.ctx, [dx, dy] = DIRS[dir], hs = tw * 1.3;
+      const tipX = p[0] + dx * hs * 1.08, tipY = p[1] + dy * hs * 1.08;
+      const bx = p[0] - dx * hs * 0.2, by = p[1] - dy * hs * 0.2;
+      ctx.beginPath();
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(bx - dy * hs * 0.78, by + dx * hs * 0.78);
+      ctx.lineTo(bx + dy * hs * 0.78, by - dx * hs * 0.78);
+      ctx.closePath();
+      ctx.lineJoin = 'round'; ctx.lineWidth = ow * 2; ctx.strokeStyle = edge; ctx.stroke();
+      ctx.fillStyle = fill; ctx.fill();
+    }
+
+    /** سهم ملوّن يتحرك (خروج أو اصطدام): كل خانة تحتفظ بلونها أثناء الانزلاق */
+    _artMoving(an, u, v, override) {
+      const ctx = this.ctx, a = an.a, n = an.n, { tw, ow } = this._artW(v);
+      const piece = i => {
+        if (n === 0) return subPath(an.E, u - 0.3, u);
+        const a0 = Math.max(u, u + i - 0.5), a1 = Math.min(u + n, u + i + 0.5);
+        return a1 - a0 < 0.01 ? null : subPath(an.E, a0, a1);
+      };
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      for (let pass = 0; pass < 2; pass++) {
+        ctx.lineWidth = pass ? tw : tw + ow * 2;
+        for (let i = 0; i <= n; i++) {
+          const pc = piece(i); if (!pc) continue;
+          const c = override || a.cols[i];
+          ctx.strokeStyle = pass ? c : edgeOf(c);
+          strokePoly(ctx, pc);
+        }
+      }
+      const c = override || a.cols[n];
+      this._artHead(pointAt(an.E, u + n), a.dir, tw, ow, c, edgeOf(c));
     }
 
     _drawLens(lw) {
@@ -701,6 +813,20 @@
     }
   }
 
+  // لون حافة السهم الملوّن: أغمق من لونه، أو أفتح قليلاً إذا كان اللون داكناً جداً
+  const edgeCache = {};
+  function edgeOf(hex) {
+    let e = edgeCache[hex];
+    if (e) return e;
+    const n = parseInt(String(hex).slice(1, 7), 16) || 0;
+    let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    if (lum < 70) { r += (255 - r) * 0.3; g += (255 - g) * 0.3; b += (255 - b) * 0.3; }
+    else { r *= 0.66; g *= 0.66; b *= 0.68; }
+    e = '#' + [r, g, b].map(x => Math.round(x).toString(16).padStart(2, '0')).join('');
+    edgeCache[hex] = e;
+    return e;
+  }
   function segDist(px, py, ax, ay, bx, by) {
     const dx = bx - ax, dy = by - ay;
     const l = dx * dx + dy * dy;

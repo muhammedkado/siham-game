@@ -268,6 +268,146 @@
     ] },
   ];
 
+  // ——— حزمة "حيوانات من أسهم": رسومات كيوت بألوان مسطّحة وحدود، الأسهم الملوّنة ترسمها ———
+  const AP = {
+    K: '#3b2f2f', W: '#ffffff', A: '#b9bfcc', S: '#a3b18a', O: '#f0a04b', N: '#b5793f', n: '#f3d4ab',
+    P: '#ffa3b5', C: '#ff9db0', G: '#6cc070', L: '#bfe6a8', Y: '#ffd23f', y: '#f4b23a', D: '#344563',
+    R: '#ff7f2a', E: '#fff1d6', M: '#f7e6cc', F: '#f28c38', Q: '#d9772e', H: '#d9a46c',
+  };
+  const SH = { sh: 'n', pri: 6 }, B2 = { sh: 'n', pri: 2 }, OL = { ol: 1 };
+  // عين كيوت: الكبيرة فيها لمعة، والصغيرة مربّع مدوّر واضح بدقة البكسل
+  const eye = (x, y, rx, ry) => rx >= 4.5
+    ? [E(x, y, rx, ry, 0, 'K', DET), C(x + rx * 0.35, y - ry * 0.4, Math.max(1.2, rx * 0.38), 'W', SH)]
+    : [Rr(x - rx - 0.4, y - ry, rx * 2 + 0.8, ry * 2, rx * 0.45, 'K', DET)];
+  const blush = (x, y, rx) => E(x, y, rx || 4.2, (rx || 4.2) * 0.62, 0, 'C', B2);
+  const happy = (x, y, w) => Ln([x - w, y + w * 0.4, x, y - w * 0.6, x + w, y + w * 0.4], 2.2, 'K', DET);
+  const ANIMALS = [
+    { id: 'cats3', pack: 'animals', flat: 1, palette: AP, ratio: 1.8, w: 24, name: { ar: 'برج القطط', en: 'Cat Tower' }, view: [100, 172], shapes: [
+      // القطة السفلى (كاليكو، تضحك)
+      P([18, 132, 20, 104, 42, 118], 'O'), P([82, 132, 80, 104, 58, 118], 'W'),
+      E(50, 140, 36, 27, 0, 'W'),
+      E(31, 129, 13, 10, -20, 'O', D), E(74, 147, 9, 8, 0, 'N', D),
+      Ln([33, 135, 40, 139, 33, 143], 2.2, 'K', DET), Ln([67, 135, 60, 139, 67, 143], 2.2, 'K', DET),
+      E(50, 150, 6.5, 6, 0, 'K', DET), E(50, 153.5, 3.8, 2.4, 0, 'P', DET),
+      blush(29, 147), blush(71, 147),
+      E(28, 161, 7, 8, 0, 'W', OL), E(72, 161, 7, 8, 0, 'W', OL),
+      // القطة الوسطى (خضراء، تلوّح)
+      P([18, 84, 22, 56, 42, 72], 'S'), P([82, 84, 78, 56, 58, 72], 'S'),
+      P([24, 78, 26, 63, 36, 72], 'P', D), P([76, 78, 74, 63, 64, 72], 'P', D),
+      E(50, 92, 34, 25, 0, 'S', OL),
+      happy(38, 91, 5), happy(62, 91, 5),
+      Ln([44, 99, 47, 102, 50, 99, 53, 102, 56, 99], 1.8, 'K', DET),
+      blush(29, 99), blush(71, 99),
+      E(12, 72, 7, 9, -15, 'S', OL),
+      E(36, 116, 8, 6, 0, 'S', OL), E(64, 116, 8, 6, 0, 'S', OL),
+      // القطة العليا (بيضاء ورمادية، مندهشة)
+      P([20, 38, 24, 10, 42, 26], 'A'), P([80, 38, 76, 10, 58, 26], 'A'),
+      P([26, 32, 28, 18, 37, 26], 'P', D), P([74, 32, 72, 18, 63, 26], 'P', D),
+      E(50, 46, 32, 24, 0, 'W', OL),
+      E(67, 33, 11, 7, 20, 'A', D),
+      ...eye(38, 47, 4.2, 5), ...eye(62, 47, 4.2, 5),
+      P([47.5, 53, 52.5, 53, 50, 55.5], 'P', DET),
+      E(50, 59.5, 2.8, 3, 0, 'P', DET),
+      blush(30, 55), blush(70, 55),
+      E(38, 68, 7, 5, 0, 'W', OL), E(62, 68, 7, 5, 0, 'W', OL),
+    ] },
+    { id: 'bunny', pack: 'animals', flat: 1, palette: AP, ratio: 1.45, w: 22, name: { ar: 'أرنوب', en: 'Bunny' }, view: [100, 124], shapes: [
+      E(33, 32, 10, 30, -8, 'W'), E(67, 32, 10, 30, 8, 'W'),
+      E(33, 35, 5, 21, -8, 'P', D), E(67, 35, 5, 21, 8, 'P', D),
+      E(50, 86, 38, 31, 0, 'W', OL),
+      ...eye(36, 86, 4, 5), ...eye(64, 86, 4, 5),
+      P([46.5, 93, 53.5, 93, 50, 96.5], 'P', DET),
+      Ln([50, 96, 50, 99], 1.6, 'K', DET), Ln([44, 101, 47, 103, 50, 99, 53, 103, 56, 101], 1.7, 'K', DET),
+      blush(26, 97, 5), blush(74, 97, 5),
+      E(38, 116, 8, 6, 0, 'W', OL), E(62, 116, 8, 6, 0, 'W', OL),
+    ] },
+    { id: 'bear', pack: 'animals', flat: 1, palette: AP, w: 22, name: { ar: 'دبدوب', en: 'Teddy' }, view: [100, 92], shapes: [
+      C(20, 24, 13, 'N'), C(80, 24, 13, 'N'), C(20, 24, 7, 'n', D), C(80, 24, 7, 'n', D),
+      E(50, 54, 42, 36, 0, 'N', OL),
+      E(50, 67, 16, 12, 0, 'n', D),
+      E(50, 62, 5.5, 4, 0, 'K', DET), Ln([50, 65, 50, 70], 1.6, 'K', DET), Ln([44, 70, 47, 72.5, 50, 70, 53, 72.5, 56, 70], 1.7, 'K', DET),
+      ...eye(33, 50, 4, 4.6), ...eye(67, 50, 4, 4.6),
+      blush(24, 64, 5), blush(76, 64, 5),
+    ] },
+    { id: 'fox', pack: 'animals', flat: 1, palette: AP, w: 22, name: { ar: 'ثعلوب', en: 'Fox' }, view: [100, 88], shapes: [
+      P([10, 46, 16, 4, 44, 28], 'F'), P([90, 46, 84, 4, 56, 28], 'F'),
+      P([19, 38, 21, 15, 36, 28], 'K', D), P([81, 38, 79, 15, 64, 28], 'K', D),
+      E(50, 54, 40, 30, 0, 'F', OL),
+      E(32, 67, 18, 13, 18, 'W', D), E(68, 67, 18, 13, -18, 'W', D), E(50, 75, 12, 8, 0, 'W', D),
+      ...eye(35, 53, 3.6, 4.6), ...eye(65, 53, 3.6, 4.6),
+      E(50, 67, 4.5, 3.4, 0, 'K', DET), Ln([45, 72, 48, 74, 50, 72, 52, 74, 55, 72], 1.6, 'K', DET),
+      blush(24, 64), blush(76, 64),
+    ] },
+    { id: 'frog', pack: 'animals', flat: 1, palette: AP, w: 24, name: { ar: 'ضفدوع', en: 'Froggy' }, view: [100, 82], shapes: [
+      C(28, 24, 15, 'G'), C(72, 24, 15, 'G'),
+      E(50, 52, 46, 28, 0, 'G', OL),
+      C(28, 24, 10, 'W', D), C(72, 24, 10, 'W', D),
+      ...eye(30, 25, 4.6, 5.4), ...eye(74, 25, 4.6, 5.4),
+      E(50, 64, 30, 12, 0, 'L', D),
+      Ln([30, 52, 40, 58, 50, 60, 60, 58, 70, 52], 2.4, 'K', DET),
+      blush(18, 55, 5.5), blush(82, 55, 5.5),
+    ] },
+    { id: 'penguin', pack: 'animals', flat: 1, palette: AP, ratio: 1.45, w: 22, name: { ar: 'بطريق', en: 'Penguin' }, view: [100, 122], shapes: [
+      E(13, 74, 8, 20, 22, 'D'), E(87, 74, 8, 20, -22, 'D'),
+      E(36, 116, 11, 5, 0, 'R'), E(64, 116, 11, 5, 0, 'R'),
+      E(50, 64, 38, 50, 0, 'D', OL),
+      C(38, 46, 15, 'W', D), C(62, 46, 15, 'W', D), E(50, 84, 26, 28, 0, 'W', D),
+      ...eye(39, 46, 3.6, 4.4), ...eye(61, 46, 3.6, 4.4),
+      P([44, 53, 56, 53, 50, 61], 'R', DET),
+      blush(29, 56), blush(71, 56),
+    ] },
+    { id: 'chick', pack: 'animals', flat: 1, palette: AP, w: 22, name: { ar: 'صوص', en: 'Chick' }, view: [100, 104], shapes: [
+      E(45, 9, 4, 9, -20, 'Y'), E(55, 9, 4, 9, 20, 'Y'),
+      E(14, 56, 9, 13, 30, 'y'), E(86, 56, 9, 13, -30, 'y'),
+      C(50, 48, 36, 'Y', OL),
+      ...eye(38, 42, 3.8, 4.6), ...eye(62, 42, 3.8, 4.6),
+      P([45, 50, 55, 50, 50, 57], 'R', DET),
+      blush(29, 52), blush(71, 52),
+      P([10, 64, 21, 55, 31, 66, 41, 55, 50, 66, 59, 55, 69, 66, 79, 55, 90, 64, 86, 88, 72, 100, 28, 100, 14, 88], 'E', OL),
+    ] },
+    { id: 'puppy', pack: 'animals', flat: 1, palette: AP, w: 22, name: { ar: 'جرو', en: 'Puppy' }, view: [100, 88], shapes: [
+      E(15, 46, 11, 24, 15, 'N'), E(85, 46, 11, 24, -15, 'N'),
+      E(50, 46, 35, 34, 0, 'M', OL),
+      E(64, 40, 10, 9, 0, 'H', D),
+      ...eye(37, 44, 3.8, 4.6), ...eye(63, 44, 3.8, 4.6),
+      E(50, 62, 13, 10, 0, 'W', D),
+      E(50, 57, 5, 3.6, 0, 'K', DET), Ln([44, 63, 47, 65, 50, 62, 53, 65, 56, 63], 1.6, 'K', DET), E(50, 69, 3.5, 4, 0, 'P', DET),
+      blush(30, 58), blush(70, 58),
+    ] },
+    { id: 'lion', pack: 'animals', flat: 1, palette: AP, w: 24, name: { ar: 'أسد', en: 'Lion' }, view: [100, 100], shapes: [
+      C(50, 50, 42, 'Q'), ...petals(50, 50, 40, 12, 10, 8, 'Q'),
+      C(27, 25, 8, 'Y'), C(73, 25, 8, 'Y'), C(27, 25, 4, 'y', D), C(73, 25, 4, 'y', D),
+      C(50, 54, 29, 'Y', OL),
+      E(42, 66, 9, 7, 0, 'M', D), E(58, 66, 9, 7, 0, 'M', D),
+      P([45, 58, 55, 58, 50, 63.5], 'N', DET),
+      ...eye(39, 48, 3.6, 4.4), ...eye(61, 48, 3.6, 4.4),
+      Ln([46, 71, 50, 73, 54, 71], 1.6, 'K', DET),
+      blush(31, 58), blush(69, 58),
+    ] },
+    { id: 'friends3', pack: 'animals', flat: 1, palette: AP, ratio: 1.9, w: 22, name: { ar: 'برج الأصحاب', en: 'Friends Tower' }, view: [100, 180], shapes: [
+      // الدب في الأسفل
+      C(20, 130, 11, 'N'), C(80, 130, 11, 'N'), C(20, 130, 5.5, 'n', D), C(80, 130, 5.5, 'n', D),
+      E(50, 152, 38, 27, 0, 'N'),
+      E(50, 162, 13, 9, 0, 'n', D), E(50, 158, 4.5, 3.2, 0, 'K', DET), Ln([45, 165, 50, 167.5, 55, 165], 1.6, 'K', DET),
+      happy(35, 150, 4.5), happy(65, 150, 4.5),
+      blush(26, 160), blush(74, 160),
+      // الأرنب في الوسط (آذان متدلية)
+      E(17, 104, 8, 18, 25, 'W'), E(83, 104, 8, 18, -25, 'W'), E(17, 105, 4, 12, 25, 'P', D), E(83, 105, 4, 12, -25, 'P', D),
+      E(50, 100, 32, 24, 0, 'W', OL),
+      ...eye(39, 100, 3.4, 4.2), ...eye(61, 100, 3.4, 4.2),
+      P([47, 106, 53, 106, 50, 109], 'P', DET), Ln([45, 112, 50, 110, 55, 112], 1.6, 'K', DET),
+      blush(30, 108), blush(70, 108),
+      E(36, 124, 8, 6, 0, 'W', OL), E(64, 124, 8, 6, 0, 'W', OL),
+      // الصوص فوق
+      E(46, 42, 3.5, 7, -20, 'Y'), E(54, 42, 3.5, 7, 20, 'Y'),
+      E(30, 66, 6, 9, 30, 'y'), E(70, 66, 6, 9, -30, 'y'),
+      C(50, 62, 18, 'Y', OL),
+      ...eye(43, 59, 2.8, 3.4), ...eye(57, 59, 2.8, 3.4),
+      P([46.5, 64, 53.5, 64, 50, 69], 'R', DET),
+    ] },
+  ];
+  PICTURES.push(...ANIMALS);
+
   // ===================== التحويل لبكسل =====================
   function hexToHsl(hex) {
     const n = parseInt(hex.slice(1), 16);
@@ -384,7 +524,7 @@
     }
     bx0 = Math.max(0, bx0); by0 = Math.max(0, by0); bx1 = Math.min(VW0, bx1); by1 = Math.min(VH0, by1);
     const VW = bx1 - bx0, VH = by1 - by0;
-    const cs = Math.max(VW / size, VH / (size * 1.4));
+    const cs = Math.max(VW / size, VH / (size * (pic.ratio || 1.4)));
     const W = Math.max(1, Math.ceil(VW / cs - 0.01)), H = Math.max(1, Math.ceil(VH / cs - 0.01));
     const ox = bx0 + (VW - W * cs) / 2, oy = by0 + (VH - H * cs) / 2;
     const N = 4, NN = N * N;
@@ -424,6 +564,8 @@
     }
     const W2 = maxX - minX + 1, H2 = maxY - minY + 1;
     const mask = new Uint8Array(W2 * H2), color = new Array(W2 * H2).fill(null), own = new Int16Array(W2 * H2).fill(-1);
+    // خانات ثابتة (الحدود والتفاصيل الدقيقة): في وضع الرسم بالأسهم تبقى مرسومة مثل خطوط كتاب التلوين
+    const fixed = new Uint8Array(W2 * H2);
     for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) own[y * W2 + x] = owner[(y + minY) * W + x + minX];
     // الضوء من الأعلى-يسار على الشاشة
     const Lx = mirror ? -0.55 : 0.55, Ly = 0.83;
@@ -436,7 +578,7 @@
       const base = colorOf(pic, s.c);
       const nb = [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]].map(([nx, ny]) => (nx < 0 || ny < 0 || nx >= W2 || ny >= H2) ? -1 : own[ny * W2 + nx]);
       let t = 2;
-      if (s.sh !== 'n') {
+      if (s.sh !== 'n' && !pic.flat) {
         const b = gbox[s.g || ('#' + o)];
         let px = ox + (x + minX + 0.5) * cs; if (mirror) px = bx0 + bx1 - px;
         const py = oy + (y + minY + 0.5) * cs;
@@ -449,15 +591,17 @@
       if (outline && nb.some(v => v < 0)) t = 0;
       else if (s.ol && nb.some(v => v >= 0 && v < o && (shapes[v].g || v) !== (s.g || o) && shapes[v].c !== s.c)) t = 0;
       color[i] = tone(base, t);
+      if (t === 0 || (s.pri || 1) >= 4) fixed[i] = 1;
     }
-    const out = { W: W2, H: H2, mask, color };
+    const out = { W: W2, H: H2, mask, color, fixed };
     rasterCache[key] = out;
     return out;
   }
 
-  function mainPics() { return PICTURES.filter(p => !p.tutorial); }
+  function mainPics() { return PICTURES.filter(p => !p.tutorial && !p.pack); }
+  function packPics(pack) { return PICTURES.filter(p => p.pack === pack); }
 
-  const api = { PALETTE, PICTURES, colorOf, rasterize, tone, mainPics };
+  const api = { PALETTE, PICTURES, colorOf, rasterize, tone, mainPics, packPics, C, E, Rr, P, Ln, CUT };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else Object.assign(root, api);
 })(typeof window !== 'undefined' ? window : globalThis);

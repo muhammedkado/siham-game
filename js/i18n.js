@@ -80,6 +80,9 @@
       heartGift: 'قلب هدية من السلسلة ❤️',
       bestStreak: 'أطول سلسلة',
       streakLost: 'انقطعت السلسلة',
+      pack: 'حيوانات', packSub: 'رسومات من أسهم', packTitle: 'حيوانات من أسهم',
+      packHint: 'الأسهم الملوّنة ترسم الحيوان… حرّرها لتكتمل اللوحة',
+      giftTitle: 'وصلتك خريطة خاصة', giftPlay: 'العب الآن', later: 'لاحقاً', loveWin: 'اكتملت لوحة', more: 'المزيد',
       coachStreak: 'سلسلة رائعة! كل 10 أسهم صحيحة على التوالي تُرجع لك قلباً ضائعاً ❤️',
     },
     en: {
@@ -160,6 +163,9 @@
       heartGift: 'Streak gift: +1 ❤️',
       bestStreak: 'Best streak',
       streakLost: 'Streak lost',
+      pack: 'Animals', packSub: 'Arrow art', packTitle: 'Arrow Animals',
+      packHint: 'The colored arrows draw the animal… free them to finish the picture',
+      giftTitle: 'You got a special map', giftPlay: 'Play now', later: 'Later', loveWin: 'You completed', more: 'More',
       coachStreak: 'Great streak! Every 10 correct arrows in a row give back a lost heart ❤️',
     },
   };

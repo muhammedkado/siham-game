@@ -6,7 +6,7 @@
 
   // ——— الحفظ ———
   const DEFAULT = {
-    level: 1, stars: {}, hints: 3, lenses: 3, pics: {},
+    level: 1, stars: {}, hints: 3, lenses: 3, pics: {}, pack: {}, gifts: [],
     daily: { last: null, streak: 0 },
     set: { theme: 'light', sound: true, music: true, vibe: true, lang: 'ar', safe: true },
     seen: {},
@@ -28,6 +28,7 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => el.classList.remove('show'), ms || 2200);
   }
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const icon = (id, cls) => `<svg class="ico ${cls || ''}"><use href="#${id}"/></svg>`;
   const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
   const yesterday = () => { const d = new Date(Date.now() - 864e5); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
@@ -66,6 +67,7 @@
     if (id === 'levels') renderLevels();
     if (id === 'gallery') renderGallery();
     if (id === 'settings') renderSettings();
+    if (id === 'pack') renderPack();
     if (id === 'game') requestAnimationFrame(() => engine.resize());
     else { Music.stop(); idleStop(); }
   }
@@ -94,6 +96,7 @@
     const spec = Gen.levelSpec(S.level);
     const cv = $('h-mystery');
     drawPic(cv, Gen.buildBoard(PICTURES.find(p => p.id === spec.pic), spec.w || spec.f, spec.mirror), 'silhouette');
+    $('h-pack').textContent = Gen.packPics().filter(p => S.pack[p.id]).length + '/' + Gen.packPics().length;
     $('h-daily').innerHTML = S.daily.last === today() ? t('dailyDone') : (S.daily.streak > 0 && S.daily.last === yesterday() ? icon('i-fire') + ' ' + t('streak') + ' ' + S.daily.streak : '+1 💡 +1 🔍');
   }
 
@@ -121,6 +124,57 @@
     requestAnimationFrame(() => g.querySelectorAll('canvas').forEach(c => drawPic(c, picBoard(c.dataset.p), S.pics[c.dataset.p] ? 'full' : 'silhouette')));
   }
 
+  // ——— حيوانات من أسهم + الخرائط الخاصة (هدايا عبر رابط) ———
+  /** الرابط يحمل الرقعة كاملة بعد # : الاسم~العرض~الطول~الألوان~البيانات */
+  function decodeGift(raw) {
+    try {
+      const [nm, w, h, pal, data] = String(raw).split('~');
+      const W = +w, H = +h;
+      if (!(W > 1 && H > 1 && W <= 64 && H <= 90) || !data) return null;
+      const cols = (pal.match(/[0-9a-fA-F]{6}/g) || []).map(c => '#' + c.toLowerCase());
+      const bin = atob(data.replace(/-/g, '+').replace(/_/g, '/'));
+      if (bin.length !== W * H) return null;
+      const mask = new Uint8Array(W * H), color = new Array(W * H).fill(null), fixed = new Uint8Array(W * H);
+      for (let i = 0; i < W * H; i++) {
+        const v = bin.charCodeAt(i), k = v & 127;
+        if (k && cols[k - 1]) { mask[i] = 1; color[i] = cols[k - 1]; fixed[i] = v & 128 ? 1 : 0; }
+      }
+      return { id: 'g' + Gen.hashStr(String(raw)).toString(36), name: decodeURIComponent(nm).slice(0, 40), board: { W, H, mask, color, fixed } };
+    } catch (e) { return null; }
+  }
+  const gifts = () => S.gifts.map(decodeGift).filter(Boolean);
+
+  function renderPack() {
+    const g = $('pack-grid'), pics = Gen.packPics(), gl = gifts();
+    $('pack-count').textContent = pics.filter(p => S.pack[p.id]).length + '/' + pics.length;
+    const stars = st => `<span class="st">${[1, 2, 3].map(i => icon('i-star', i <= st ? 'on' : '')).join('')}</span>`;
+    g.innerHTML = gl.map(x => `<button class="pk love" data-k="g:${x.id}"><canvas></canvas><span>${esc(x.name)}</span>${stars(S.pack[x.id] || 0)}</button>`).join('')
+      + pics.map((p, i) => `<button class="pk" data-k="p:${i}"><canvas></canvas><span>${esc(p.name[S.set.lang])}</span>${stars(S.pack[p.id] || 0)}</button>`).join('');
+    g.querySelectorAll('.pk').forEach(b => b.addEventListener('click', () => {
+      Sound.unlock(); Sound.click();
+      const k = b.dataset.k;
+      if (k[0] === 'g') startGift(k.slice(2)); else startPack(+k.slice(2));
+    }));
+    requestAnimationFrame(() => g.querySelectorAll('.pk').forEach(b => {
+      const k = b.dataset.k;
+      const board = k[0] === 'g' ? gl.find(x => x.id === k.slice(2)).board : Gen.buildBoard(pics[+k.slice(2)], pics[+k.slice(2)].w, false);
+      drawPic(b.querySelector('canvas'), board, 'full');
+    }));
+  }
+
+  function checkGift() {
+    const m = /[#&]gift=([^&]+)/.exec(location.hash || '');
+    if (!m) return;
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* ignore */ }
+    const g = decodeGift(m[1]);
+    if (!g) return;
+    if (!gifts().some(x => x.id === g.id)) { S.gifts.unshift(m[1]); save(); }
+    modal(`<h3>🎁</h3><p>${t('giftTitle')}</p><h3 class="gift-name">${esc(g.name)}</h3><canvas id="m-pic"></canvas>
+      <div class="m-actions"><button class="btn primary" data-a="play">${t('giftPlay')}</button><button class="btn" data-a="later">${t('later')}</button></div>`,
+    { play: () => { closeModal(); startGift(g.id); }, later: () => { closeModal(); show('pack'); } });
+    requestAnimationFrame(() => drawPic($('m-pic'), g.board, 'full'));
+  }
+
   // ——— الإعدادات ———
   function renderSettings() {
     document.querySelectorAll('#set-theme button').forEach(b => b.classList.toggle('on', b.dataset.v === S.set.theme));
@@ -139,7 +193,7 @@
   $('set-safe').addEventListener('change', e => { S.set.safe = e.target.checked; save(); engine.safeTap = S.set.safe; });
   $('set-reset').addEventListener('click', () => {
     modal(`<h3>⚠️</h3><p>${t('resetConfirm')}</p><div class="m-actions"><button class="btn" data-a="yes" style="color:var(--danger)">${t('yes')}</button><button class="btn primary" data-a="no">${t('no')}</button></div>`, {
-      yes: () => { const set = S.set; S = JSON.parse(JSON.stringify(DEFAULT)); S.set = set; save(); closeModal(); show('home'); },
+      yes: () => { const set = S.set, gf = S.gifts; S = JSON.parse(JSON.stringify(DEFAULT)); S.set = set; S.gifts = gf; save(); closeModal(); show('home'); },
       no: closeModal,
     });
   });
@@ -198,6 +252,20 @@
     const tips = { 1: 'coach1', 3: 'coach3', 4: 'coach4', 5: 'coach5' };
     if (tips[n] && !S.seen[tips[n]]) { S.seen[tips[n]] = 1; save(); setTimeout(() => coach(t(tips[n])), 350); }
   }
+  function startPack(i) {
+    const pic = Gen.packPics()[i];
+    if (!pic) { show('pack'); return; }
+    G.mode = 'pack'; G.n = 0; G.pk = i;
+    launch(Gen.makeLevel(Gen.packSpec(i)), 3);
+    $('g-title').textContent = pic.name[S.set.lang];
+  }
+  function startGift(id) {
+    const g = gifts().find(x => x.id === id);
+    if (!g) { show('pack'); return; }
+    G.mode = 'gift'; G.n = 0; G.gift = g;
+    launch(Gen.makeLevel(Gen.customSpec(g)), 3);
+    $('g-title').textContent = g.name;
+  }
   function startDaily() {
     G.mode = 'daily'; G.n = 0;
     launch(Gen.makeLevel(Gen.dailySpec(today())), 3);
@@ -216,10 +284,10 @@
     engine.load(level, { hearts, zen });
     idleArm();
     const cells = level.mask.reduce((a, b) => a + b, 0);
-    const diff = Gen.difficultyOf(cells);
+    const diff = Gen.difficultyOf(level.art ? level.arrows.length * 3.5 : cells);
     $('g-diff').textContent = zen ? '🍃' : t(diff);
     // موسيقى هادئة أو حماسية حسب المرحلة
-    G.style = zen ? 'calm'
+    G.style = zen || G.mode === 'pack' || G.mode === 'gift' ? 'calm'
       : G.mode === 'daily' ? 'hype'
       : (diff === 'hard' || diff === 'expert' || (G.n > 3 && G.n % 5 === 0)) ? 'hype' : 'calm';
     G.seed = level.spec.seed;
@@ -229,6 +297,8 @@
   function restart() {
     if (G.mode === 'journey') startLevel(G.n);
     else if (G.mode === 'daily') startDaily();
+    else if (G.mode === 'pack') startPack(G.pk);
+    else if (G.mode === 'gift') startGift(G.gift.id);
     else launch(G.level, 0, true);
   }
 
@@ -422,18 +492,22 @@
   $('btn-play').addEventListener('click', () => { Sound.unlock(); startLevel(S.level); });
   $('btn-daily').addEventListener('click', () => { Sound.unlock(); startDaily(); });
   $('btn-zen').addEventListener('click', () => { Sound.unlock(); startZen(); });
+  $('btn-pack').addEventListener('click', () => { Sound.unlock(); Sound.click(); show('pack'); });
 
+  const exitTo = () => G.mode === 'pack' || G.mode === 'gift' ? 'pack' : G.mode === 'journey' && prevScreen === 'levels' ? 'levels' : 'home';
   function confirmQuit() {
-    if (engine.left === engine.total || engine.won) { show(G.mode === 'journey' && prevScreen === 'levels' ? 'levels' : 'home'); return; }
+    if (engine.left === engine.total || engine.won) { show(exitTo()); return; }
     modal(`<h3>🤔</h3><h3 style="font-size:20px">${t('quit')}</h3><p>${t('quitSub')}</p><div class="m-actions"><button class="btn primary" data-a="stay">${t('no')}</button><button class="btn" data-a="go">${t('home')}</button></div>`,
-      { stay: closeModal, go: () => { closeModal(); show('home'); } });
+      { stay: closeModal, go: () => { closeModal(); show(exitTo()); } });
   }
 
   function onWin() {
     Music.stop(); idleStop();
     Sound.win(); vibrate([20, 40, 20, 40, 60]);
     const stars = G.mode === 'zen' ? 3 : G.usedChance ? 1 : Math.max(1, 3 - engine.mistakes);
-    S.pics[G.level.pic] = 1;
+    if (G.mode !== 'pack' && G.mode !== 'gift') S.pics[G.level.pic] = 1;
+    const packId = G.mode === 'pack' ? Gen.packPics()[G.pk].id : G.mode === 'gift' ? G.gift.id : null;
+    if (packId) S.pack[packId] = Math.max(S.pack[packId] || 0, stars);
     const rewards = [];
     if (G.mode === 'journey') {
       S.stars[G.n] = Math.max(S.stars[G.n] || 0, stars);
@@ -448,19 +522,22 @@
       S.hints++; S.lenses++; rewards.push('+1 💡', '+1 🔍', '🔥 ' + S.daily.streak);
     }
     save(); updateTools();
-    const name = G.level.picName[S.set.lang];
-    const sub = G.mode === 'daily' ? t('dailyWin') : `${t('winSub')}: <b>${name}</b>`;
+    const name = esc(G.level.picName[S.set.lang]);
+    const love = G.mode === 'gift';
+    const sub = G.mode === 'daily' ? t('dailyWin') : love ? `${t('loveWin')}: <b style="color:#e5383b">${name}</b>` : `${t('winSub')}: <b>${name}</b>`;
     const flawless = G.mode !== 'zen' && engine.mistakes === 0 ? `<p style="color:var(--ok);font-weight:700;margin-top:-6px">${t('perfect')}</p>` : '';
     const bestLine = G.best >= 3 ? `<p class="m-best">🔥 ${t('bestStreak')}: <b>${G.best}</b></p>` : '';
-    const nextBtn = G.mode === 'journey' ? `<button class="btn primary" data-a="next">${t('next')} ➜</button>` : G.mode === 'zen' ? `<button class="btn primary" data-a="zen">${t('newZen')}</button>` : '';
-    modal(`<h3>${t('winTitle')}</h3><p>${sub}</p>
+    const hasNextPack = G.mode === 'pack' && G.pk + 1 < Gen.packPics().length;
+    const nextBtn = G.mode === 'journey' || hasNextPack ? `<button class="btn primary" data-a="next">${t('next')} ➜</button>` : G.mode === 'zen' ? `<button class="btn primary" data-a="zen">${t('newZen')}</button>` : '';
+    const homeBtn = G.mode === 'pack' || G.mode === 'gift' ? `<button class="btn" data-a="pack">${t('more')} 🐾</button>` : `<button class="btn" data-a="home">${t('home')}</button>`;
+    modal(`<h3>${love ? '❤️' : t('winTitle')}</h3><p>${sub}</p>
       <canvas id="m-pic"></canvas>
       ${G.mode === 'zen' ? '' : `<div class="m-stars">${[1, 2, 3].map(i => icon('i-star', i <= stars ? 'on' : '')).join('')}</div>`}
       ${flawless}
       ${bestLine}
       ${rewards.length ? `<div class="m-reward">${t('reward')}: ${rewards.join(' ')}</div>` : ''}
-      <div class="m-actions">${nextBtn}<button class="btn" data-a="home">${t('home')}</button></div>`,
-    { next: () => startLevel(G.n + 1), zen: startZen, home: () => { closeModal(); show('home'); } });
+      <div class="m-actions">${nextBtn}${homeBtn}</div>`,
+    { next: () => G.mode === 'pack' ? startPack(G.pk + 1) : startLevel(G.n + 1), zen: startZen, home: () => { closeModal(); show('home'); }, pack: () => { closeModal(); show('pack'); } });
     document.querySelectorAll('.m-stars .ico.on').forEach((el, i) => { el.style.animationDelay = (0.15 + i * 0.18) + 's'; });
     requestAnimationFrame(() => drawPic($('m-pic'), G.level, 'full'));
   }
@@ -473,7 +550,7 @@
       {
         chance: () => { G.usedChance = true; closeModal(); engine.addHearts(1); updateHud(false, true); Music.start(G.style, G.seed); Music.setProgress(1 - engine.left / engine.total); idleArm(); },
         retry: restart,
-        home: () => { closeModal(); show('home'); },
+        home: () => { closeModal(); show(exitTo()); },
       }, { locked: true });
   }
 
@@ -490,7 +567,9 @@
   };
 
   // للاختبار
-  window.__siham = { engine, G, S, startLevel, startDaily, startZen, idleNudge };
+  window.__siham = { engine, G, S, startLevel, startDaily, startZen, idleNudge, startPack, startGift, decodeGift };
 
   applyI18n(); applyTheme(); show('home');
+  checkGift();
+  window.addEventListener('hashchange', checkGift);
 })();
