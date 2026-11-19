@@ -1,57 +1,242 @@
-/* سهام — أصوات مولّدة (بدون ملفات) */
+/* سهام — الأصوات والموسيقى (كلها مولّدة بالكود، بدون ملفات)
+ * - نغمة السهم: كل سهم يخرج يعزف نغمة أعلى من اللي قبله، على عدد أسهم المرحلة،
+ *   وكل ما تقدّمت تنضاف طبقات (خامسة، أوكتاف، ثالثة، لمعة) — وآخر سهم يعزف قفلة كاملة.
+ * - موسيقى خلفية: هادئة (Calm) أو حماسية (Energetic) حسب المرحلة، بنفس مقام نغمات الأسهم.
+ */
 (function (root) {
   'use strict';
-  let ctx = null;
-  let enabled = true;
-  const SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24]; // سلم خماسي
+  let ctx = null, master, sfxBus, musicBus, echoIn, noiseBuf;
+  let sfxOn = true, musicOn = true;
+  const PENTA = [0, 2, 4, 7, 9];
+  const MAJOR = [0, 2, 4, 5, 7, 9, 11];
+  const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+  let key = 60; // جذر المقام (MIDI) — مشترك بين الموسيقى ونغمات الأسهم
 
-  function ac() {
-    if (!ctx) {
-      const AC = root.AudioContext || root.webkitAudioContext;
-      if (!AC) return null;
-      ctx = new AC();
-    }
-    if (ctx.state === 'suspended') ctx.resume();
+  function init() {
+    if (ctx) return ctx;
+    const AC = root.AudioContext || root.webkitAudioContext;
+    if (!AC) return null;
+    ctx = new AC();
+    master = ctx.createDynamicsCompressor();
+    master.threshold.value = -12; master.ratio.value = 4;
+    master.connect(ctx.destination);
+    sfxBus = ctx.createGain(); sfxBus.gain.value = 0.9; sfxBus.connect(master);
+    musicBus = ctx.createGain(); musicBus.gain.value = 0; musicBus.connect(master);
+    // صدى خفيف للموسيقى
+    echoIn = ctx.createDelay(1.5);
+    const fb = ctx.createGain(); fb.gain.value = 0.33;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2000;
+    const wet = ctx.createGain(); wet.gain.value = 0.4;
+    echoIn.connect(lp); lp.connect(fb); fb.connect(echoIn); lp.connect(wet); wet.connect(musicBus);
+    // ضجيج أبيض للإيقاع
+    noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    document.addEventListener('visibilitychange', () => {
+      if (!ctx) return;
+      if (document.hidden) ctx.suspend(); else ctx.resume();
+    });
     return ctx;
   }
-
-  function tone(freq, dur, type, vol, slideTo, delay) {
-    const c = ac(); if (!c) return;
-    const t = c.currentTime + (delay || 0);
-    const o = c.createOscillator(), g = c.createGain();
-    o.type = type || 'sine';
-    o.frequency.setValueAtTime(freq, t);
-    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol || 0.2, t + 0.012);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(c.destination);
-    o.start(t); o.stop(t + dur + 0.02);
+  function ac() {
+    const c = init();
+    if (c && c.state === 'suspended' && !document.hidden) c.resume();
+    return c;
   }
 
+  /** صوت واحد: مذبذب + غلاف صوتي (+ فلتر اختياري) */
+  function voice(dest, freq, t, dur, type, vol, o) {
+    o = o || {};
+    const osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.setValueAtTime(freq, t);
+    if (o.slideTo) osc.frequency.exponentialRampToValueAtTime(o.slideTo, t + dur);
+    if (o.detune) osc.detune.value = o.detune;
+    const a = o.attack || 0.008;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + a);
+    if (o.sustain) g.gain.setValueAtTime(vol, t + Math.max(a, dur - o.sustain));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    let node = osc;
+    if (o.filter) {
+      const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = o.filter; f.Q.value = o.q || 0.7;
+      osc.connect(f); node = f;
+    }
+    node.connect(g); g.connect(dest);
+    if (o.echo) g.connect(echoIn);
+    osc.start(t); osc.stop(t + dur + 0.05);
+  }
+  function noise(dest, t, dur, vol, type, freq) {
+    const src = ctx.createBufferSource(); src.buffer = noiseBuf;
+    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f); f.connect(g); g.connect(dest);
+    src.start(t, Math.random() * 0.5); src.stop(t + dur + 0.02);
+  }
+
+  // ===================== المؤثرات =====================
   const Sound = {
-    setEnabled(v) { enabled = v; },
-    unlock() { if (enabled) ac(); },
-    pop(combo) {
-      if (!enabled) return;
-      const step = SCALE[Math.min(SCALE.length - 1, combo || 0)];
-      const f = 440 * Math.pow(2, step / 12);
-      tone(f, 0.16, 'sine', 0.18, f * 1.5);
-      tone(f * 2, 0.08, 'triangle', 0.05);
+    setEnabled(v) { sfxOn = v; },
+    unlock() { ac(); },
+
+    /** نغمة السهم رقم index من total (تبدأ من 0) */
+    pop(index, total, combo) {
+      if (!sfxOn) return;
+      const c = ac(); if (!c) return;
+      const t = c.currentTime;
+      const N = Math.max(1, total);
+      // مراحل قصيرة: سلّم خماسي؛ مراحل طويلة: سلّم كبير يغطي مدى أوسع
+      const scale = N <= 16 ? PENTA : MAJOR;
+      const span = Math.min(N, N <= 16 ? 16 : 25);
+      const deg = N <= 1 ? 0 : Math.round(index * (span - 1) / (N - 1));
+      const m = key - 12 + 12 * Math.floor(deg / scale.length) + scale[deg % scale.length];
+      const f = mtof(m);
+      const prog = N <= 1 ? 1 : index / (N - 1);
+      const layers = Math.min(6, 1 + Math.floor(prog * 4.5) + (combo >= 3 ? 1 : 0));
+
+      voice(sfxBus, f, t, 0.26, 'triangle', 0.22, { slideTo: f * 1.01 });   // 1) الأساس
+      voice(sfxBus, f * 4, t, 0.05, 'sine', 0.04);                             // نقرة خفيفة
+      if (layers >= 2) voice(sfxBus, f * 1.5, t + 0.012, 0.3, 'sine', 0.08);   // 2) خامسة
+      if (layers >= 3) voice(sfxBus, f * 2, t + 0.035, 0.34, 'sine', 0.07);    // 3) أوكتاف
+      if (layers >= 4) voice(sfxBus, f * 2.52, t + 0.06, 0.36, 'sine', 0.05);  // 4) ثالثة فوق الأوكتاف
+      if (layers >= 5) voice(sfxBus, f * 3, t + 0.085, 0.4, 'sine', 0.035);    // 5) خامسة عالية
+      if (layers >= 6) voice(sfxBus, f * 4, t + 0.11, 0.45, 'sine', 0.03);     // 6) لمعة
+      if (index === N - 1) {
+        // قفلة: كورد كامل متصاعد
+        [0, 4, 7, 12, 16, 19, 24].forEach((s, i) =>
+          voice(sfxBus, mtof(key + s), t + 0.12 + i * 0.05, 0.6, 'triangle', 0.08));
+      }
     },
     bump() {
-      if (!enabled) return;
-      tone(150, 0.22, 'triangle', 0.3, 70);
-      tone(90, 0.18, 'sine', 0.25, 50, 0.02);
+      if (!sfxOn) return;
+      const c = ac(); if (!c) return; const t = c.currentTime;
+      voice(sfxBus, 150, t, 0.22, 'triangle', 0.3, { slideTo: 70 });
+      voice(sfxBus, 90, t + 0.02, 0.18, 'sine', 0.25, { slideTo: 50 });
+      noise(sfxBus, t, 0.08, 0.12, 'lowpass', 800);
     },
-    click() { if (enabled) tone(900, 0.04, 'sine', 0.06); },
-    hint() { if (enabled) { tone(660, 0.18, 'sine', 0.12); tone(990, 0.22, 'sine', 0.1, null, 0.09); } },
-    lens(ok) { if (enabled) ok ? tone(700, 0.15, 'sine', 0.12, 1050) : tone(300, 0.2, 'sine', 0.12, 200); },
+    click() { if (sfxOn && ac()) voice(sfxBus, 900, ctx.currentTime, 0.04, 'sine', 0.06); },
+    hint() {
+      if (!sfxOn || !ac()) return; const t = ctx.currentTime;
+      voice(sfxBus, mtof(key + 19), t, 0.2, 'sine', 0.1);
+      voice(sfxBus, mtof(key + 24), t + 0.09, 0.25, 'sine', 0.09);
+    },
+    lens(ok) {
+      if (!sfxOn || !ac()) return; const t = ctx.currentTime;
+      if (ok) voice(sfxBus, 700, t, 0.15, 'sine', 0.12, { slideTo: 1050 });
+      else voice(sfxBus, 300, t, 0.2, 'sine', 0.12, { slideTo: 200 });
+    },
     win() {
-      if (!enabled) return;
-      [0, 4, 7, 12, 16].forEach((s, i) => tone(523.25 * Math.pow(2, s / 12), 0.35, 'triangle', 0.14, null, i * 0.09));
+      if (!sfxOn || !ac()) return; const t = ctx.currentTime + 0.1;
+      [0, 4, 7, 12, 16].forEach((s, i) => voice(sfxBus, mtof(key + s), t + i * 0.09, 0.45, 'triangle', 0.14));
+      [0, 7, 12, 16].forEach(s => voice(sfxBus, mtof(key + s), t + 0.5, 1.2, 'sine', 0.05, { attack: 0.05 }));
     },
-    lose() { if (enabled) [7, 4, 0].forEach((s, i) => tone(330 * Math.pow(2, s / 12), 0.3, 'sine', 0.12, null, i * 0.14)); },
+    lose() {
+      if (!sfxOn || !ac()) return; const t = ctx.currentTime;
+      [7, 4, 0].forEach((s, i) => voice(sfxBus, mtof(key + s - 12), t + i * 0.14, 0.32, 'sine', 0.12));
+    },
   };
+
+  // ===================== الموسيقى =====================
+  const CALM_PROG = [0, 5, 3, 4];      // I – vi – IV – V
+  const HYPE_PROG = [5, 3, 0, 4];      // vi – IV – I – V
+  const noteOf = (deg, oct) => key + 12 * (oct + Math.floor(deg / 7)) + MAJOR[((deg % 7) + 7) % 7];
+
+  const Music = {
+    style: null, timer: 0, step: 0, next: 0, bpm: 80, R: Math.random, progress: 0, pending: null,
+
+    setEnabled(v) {
+      musicOn = v;
+      if (!v) this.stop();
+      else if (this.pending) this.start(this.pending[0], this.pending[1]);
+    },
+    /** style: 'calm' | 'hype' */
+    start(style, seed) {
+      this.pending = [style, seed];
+      this._halt();
+      if (!musicOn) return;
+      const c = ac(); if (!c) return;
+      this.R = root.Gen ? root.Gen.rng(seed >>> 0) : Math.random;
+      key = 55 + Math.floor(this.R() * 9); // من G3 إلى D#4
+      this.style = style;
+      this.bpm = style === 'calm' ? 66 + Math.floor(this.R() * 12) : 116 + Math.floor(this.R() * 14);
+      this.prog = style === 'calm' ? CALM_PROG : HYPE_PROG;
+      this.step = 0; this.progress = 0;
+      this.next = c.currentTime + 0.15;
+      const g = musicBus.gain;
+      g.cancelScheduledValues(c.currentTime);
+      g.setValueAtTime(Math.max(0.0001, g.value), c.currentTime);
+      g.linearRampToValueAtTime(style === 'calm' ? 0.55 : 0.45, c.currentTime + 1.5);
+      this.timer = setInterval(() => this._tick(), 30);
+    },
+    stop() {
+      this.pending = null;
+      this._halt();
+    },
+    _halt() {
+      clearInterval(this.timer); this.timer = 0; this.style = null;
+      if (ctx && musicBus) {
+        const g = musicBus.gain, t = ctx.currentTime;
+        g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(0, t + 0.5);
+      }
+    },
+    /** تقدّم المرحلة 0..1 — الموسيقى تصير أغنى كل ما تقدمت */
+    setProgress(p) { this.progress = p; },
+
+    _tick() {
+      if (!ctx || !this.style) return;
+      if (ctx.state !== 'running') { this.next = ctx.currentTime + 0.1; return; }
+      const sixteenth = 60 / this.bpm / 4;
+      while (this.next < ctx.currentTime + 0.18) {
+        this._play(this.step, this.next, sixteenth);
+        this.next += sixteenth;
+        this.step++;
+      }
+    },
+    _play(step, t, six) {
+      const s = step % 16, bar = Math.floor(step / 16);
+      const ch = this.prog[bar % 4];
+      const triad = [ch, ch + 2, ch + 4];
+      const R = this.R, p = this.progress, M = musicBus;
+      if (this.style === 'calm') {
+        if (s === 0) {
+          triad.forEach((d, i) => voice(M, mtof(noteOf(d, 0)), t, six * 16 * 1.05, 'triangle', 0.035, { attack: 0.9, sustain: 0.6, filter: 1100, detune: (i - 1) * 4 }));
+          voice(M, mtof(noteOf(ch, -2)), t, six * 10, 'sine', 0.11, { attack: 0.05 });
+        }
+        if (s === 8) voice(M, mtof(noteOf(ch + 4, -2)), t, six * 7, 'sine', 0.08, { attack: 0.05 });
+        // لحن متناثر — يزيد كثافةً مع التقدّم
+        if (s % 2 === 0 && R() < 0.22 + p * 0.3) {
+          const d = triad[Math.floor(R() * 3)] + (R() < 0.3 ? 7 : 0);
+          voice(M, mtof(noteOf(d, 1)), t, 0.9, 'triangle', 0.045, { echo: true, filter: 2600 });
+        }
+        // أجراس خفيفة في النصف الثاني من المرحلة
+        if (p > 0.5 && s === 12 && R() < 0.6) voice(M, mtof(noteOf(triad[2], 2)), t, 1.4, 'sine', 0.02, { echo: true });
+      } else {
+        // طبل
+        if (s % 4 === 0) { voice(M, 140, t, 0.28, 'sine', 0.42, { slideTo: 42 }); }
+        if (s === 4 || s === 12) noise(M, t, 0.14, 0.16, 'bandpass', 1600);
+        if (s % 2 === 1) noise(M, t, 0.035, 0.05, 'highpass', 7500);
+        if (p > 0.35 && s % 4 === 2) noise(M, t, 0.09, 0.05, 'highpass', 6000);
+        // باص
+        if (s % 2 === 0) {
+          const d = s === 14 ? ch + 4 : ch;
+          voice(M, mtof(noteOf(d, -2)), t, six * 1.7, 'sawtooth', 0.1, { filter: 520, q: 4 });
+        }
+        // أربيجيو — يكثف مع التقدّم
+        if (R() < 0.45 + p * 0.45) {
+          const d = triad[s % 3] + (s >= 8 ? 7 : 0);
+          voice(M, mtof(noteOf(d, 1)), t, six * 1.6, 'square', 0.022, { filter: 2400, echo: true });
+        }
+        if (s === 0) triad.forEach(d => voice(M, mtof(noteOf(d, 0)), t, six * 16, 'triangle', 0.018, { attack: 0.3, sustain: 0.3, filter: 1500 }));
+        // لحن علوي بالنصف الثاني
+        if (p > 0.6 && (s === 0 || s === 6 || s === 10) && R() < 0.7) {
+          voice(M, mtof(noteOf(triad[Math.floor(R() * 3)], 2)), t, six * 3, 'triangle', 0.035, { echo: true });
+        }
+      }
+    },
+  };
+
   root.Sound = Sound;
+  root.Music = Music;
 })(window);

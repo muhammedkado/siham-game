@@ -8,7 +8,7 @@
   const DEFAULT = {
     level: 1, stars: {}, hints: 3, lenses: 3, pics: {},
     daily: { last: null, streak: 0 },
-    set: { theme: 'light', sound: true, vibe: true, lang: 'ar', safe: true },
+    set: { theme: 'light', sound: true, music: true, vibe: true, lang: 'ar', safe: true },
     seen: {},
   };
   let S;
@@ -71,6 +71,7 @@
     if (id === 'gallery') renderGallery();
     if (id === 'settings') renderSettings();
     if (id === 'game') requestAnimationFrame(() => engine.resize());
+    else Music.stop();
   }
   document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => { Sound.click(); show(b.dataset.go); }));
 
@@ -85,6 +86,7 @@
     if (meta) meta.content = cssVar('--bg');
     engine.setTheme({ bg: cssVar('--bg'), cell: cssVar('--cell'), ink: cssVar('--ink'), dot: cssVar('--sub'), accent: cssVar('--accent'), danger: cssVar('--danger'), ok: cssVar('--ok') });
     Sound.setEnabled(S.set.sound);
+    Music.setEnabled(S.set.music);
   }
 
   // ——— الرئيسية ———
@@ -127,11 +129,16 @@
   function renderSettings() {
     document.querySelectorAll('#set-theme button').forEach(b => b.classList.toggle('on', b.dataset.v === S.set.theme));
     document.querySelectorAll('#set-lang button').forEach(b => b.classList.toggle('on', b.dataset.v === S.set.lang));
+    $('set-music').checked = S.set.music;
     $('set-sound').checked = S.set.sound; $('set-vibe').checked = S.set.vibe; $('set-safe').checked = S.set.safe;
   }
   document.querySelectorAll('#set-theme button').forEach(b => b.addEventListener('click', () => { S.set.theme = b.dataset.v; save(); applyTheme(); renderSettings(); }));
   document.querySelectorAll('#set-lang button').forEach(b => b.addEventListener('click', () => { S.set.lang = b.dataset.v; save(); applyI18n(); renderSettings(); }));
   $('set-sound').addEventListener('change', e => { S.set.sound = e.target.checked; save(); Sound.setEnabled(S.set.sound); });
+  $('set-music').addEventListener('change', e => {
+    S.set.music = e.target.checked; save();
+    Music.setEnabled(S.set.music);
+  });
   $('set-vibe').addEventListener('change', e => { S.set.vibe = e.target.checked; save(); vibrate(20); });
   $('set-safe').addEventListener('change', e => { S.set.safe = e.target.checked; save(); engine.safeTap = S.set.safe; });
   $('set-reset').addEventListener('click', () => {
@@ -158,7 +165,8 @@
       const now = performance.now();
       G.combo = now - G.lastExit < 1400 ? G.combo + 1 : 0;
       G.lastExit = now;
-      Sound.pop(G.combo);
+      Sound.pop(total - left - 1, total, G.combo);
+      Music.setProgress(1 - left / total);
       vibrate(10);
       updateHud();
       hideCoach();
@@ -199,7 +207,14 @@
     show('game');
     engine.load(level, { hearts, zen });
     const cells = level.mask.reduce((a, b) => a + b, 0);
-    $('g-diff').textContent = zen ? '🍃' : t(Gen.difficultyOf(cells));
+    const diff = Gen.difficultyOf(cells);
+    $('g-diff').textContent = zen ? '🍃' : t(diff);
+    // موسيقى هادئة أو حماسية حسب المرحلة
+    G.style = zen ? 'calm'
+      : G.mode === 'daily' ? 'hype'
+      : (diff === 'hard' || diff === 'expert' || (G.n > 3 && G.n % 5 === 0)) ? 'hype' : 'calm';
+    G.seed = level.spec.seed;
+    Music.start(G.style, G.seed);
     updateHud(); updateTools();
   }
   function restart() {
@@ -262,6 +277,7 @@
   }
 
   function onWin() {
+    Music.stop();
     Sound.win(); vibrate([20, 40, 20, 40, 60]);
     const stars = G.mode === 'zen' ? 3 : G.usedChance ? 1 : Math.max(1, engine.hearts);
     S.pics[G.level.pic] = 1;
@@ -295,11 +311,12 @@
   }
 
   function onLose() {
+    Music.stop();
     Sound.lose();
     const chance = !G.usedChance ? `<button class="btn heart" data-a="chance">${t('secondChance')}</button>` : '';
     modal(`<h3>💔</h3><h3 style="font-size:22px">${t('loseTitle')}</h3><p>${t('loseSub')}</p><div class="m-actions">${chance}<button class="btn primary" data-a="retry">${t('tryAgain')}</button><button class="btn" data-a="home">${t('home')}</button></div>`,
       {
-        chance: () => { G.usedChance = true; closeModal(); engine.addHearts(1); updateHud(); },
+        chance: () => { G.usedChance = true; closeModal(); engine.addHearts(1); updateHud(); Music.start(G.style, G.seed); Music.setProgress(1 - engine.left / engine.total); },
         retry: restart,
         home: () => { closeModal(); show('home'); },
       }, { locked: true });
