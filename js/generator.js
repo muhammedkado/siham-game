@@ -29,8 +29,10 @@
     return a;
   }
 
-  /** يحوّل اللوحة إلى رقعة بمقياس f (تكبير بأقرب جار) */
-  function buildBoard(pic, f, mirror) {
+  /** يحوّل اللوحة إلى رقعة: لوحات الأشكال تُرسم بعرض size خانة، ولوحات البكسل اليدوي تُكبَّر بالمعامل size */
+  function buildBoard(pic, size, mirror) {
+    if (pic.shapes) return PICS.rasterize(pic, Math.max(6, Math.round(size)), mirror);
+    const f = size;
     const th = pic.art.length;
     const tw = Math.max.apply(null, pic.art.map(r => r.length));
     const W = Math.max(2, Math.round(tw * f));
@@ -57,6 +59,8 @@
     const { W, H, mask } = board;
     const R = rng(seed);
     const occ = new Int32Array(W * H).fill(-1);
+    // rayMax[c] = أكبر رقم سهم يمر طريق خروجه بالخانة c
+    const rayMax = new Int32Array(W * H).fill(-1);
     const arrows = [];
     const inG = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
 
@@ -105,13 +109,40 @@
       const id = arrows.length;
       const cells = path.slice().reverse(); // من الذيل إلى الرأس
       for (const c of cells) occ[c] = id;
+      for (const c of ray) rayMax[c] = id;
       arrows.push({ id, cells, dir: d });
       return true;
     }
 
+    /* مدّ ذيل سهم موجود إلى خانة فارغة مجاورة.
+     * آمن للحل: السهم A يُزال بعد كل الأسهم الموضوعة بعده، فيكفي ألا يمر طريق أي سهم لاحق بالخانة. */
+    const maxExt = Math.max(params.maxLen + 4, Math.round(params.maxLen * 1.6));
+    function extendPass() {
+      let grown = 0;
+      shuffle(cells, R);
+      for (const c of cells) {
+        if (occ[c] >= 0) continue;
+        const cx = c % W, cy = (c / W) | 0;
+        const opts = [];
+        for (const [dx, dy] of DIRS) {
+          const nx = cx + dx, ny = cy + dy;
+          if (!inG(nx, ny)) continue;
+          const o = occ[ny * W + nx];
+          if (o < 0) continue;
+          const a = arrows[o];
+          if (a.cells[0] !== ny * W + nx || a.cells.length >= maxExt || rayMax[c] >= o) continue;
+          opts.push(a);
+        }
+        if (!opts.length) continue;
+        const a = opts[Math.floor(R() * opts.length)];
+        a.cells.unshift(c); occ[c] = a.id; grown++;
+      }
+      return grown;
+    }
+
     const cells = [];
     for (let i = 0; i < W * H; i++) if (mask[i]) cells.push(i);
-    for (let pass = 0; pass < 10; pass++) {
+    for (let pass = 0; pass < 14; pass++) {
       shuffle(cells, R);
       let placed = 0;
       for (const h of cells) {
@@ -120,7 +151,8 @@
         const L = pass < 3 ? sampleLen() : 2 + Math.floor(R() * 3);
         for (const d of dirs) { if (tryPlace(h, d, L)) { placed++; break; } }
       }
-      if (!placed) break;
+      const grown = pass >= 1 ? extendPass() + extendPass() : 0;
+      if (!placed && !grown) break;
     }
     return arrows;
   }
@@ -159,7 +191,7 @@
 
   function makeLevel(spec) {
     const pic = PICS.PICTURES.find(p => p.id === spec.pic) || PICS.PICTURES[0];
-    const board = buildBoard(pic, spec.f, spec.mirror);
+    const board = buildBoard(pic, spec.w || spec.f, spec.mirror);
     const cellsInMask = board.mask.reduce((s, v) => s + v, 0);
     let best = null;
     const tries = spec.tries || 4;
@@ -183,17 +215,23 @@
   }
 
   // ——— تقدّم المراحل ———
-  function mainPics() {
-    const list = PICS.PICTURES.filter(p => !p.tutorial);
-    const size = p => p.art.length * Math.max.apply(null, p.art.map(r => r.length));
-    return list.slice().sort((a, b) => size(a) - size(b));
-  }
+  function mainPics() { return PICS.mainPics(); }
 
   function difficultyOf(cells) {
-    if (cells < 70) return 'easy';
-    if (cells < 170) return 'normal';
-    if (cells < 330) return 'hard';
+    if (cells < 90) return 'easy';
+    if (cells < 220) return 'normal';
+    if (cells < 420) return 'hard';
     return 'expert';
+  }
+
+  /** طول الأسهم يكبر مع حجم الرقعة حتى تصير المتاهة متشابكة وأجمل */
+  function arrowParams(w, k) {
+    return {
+      minLen: 2,
+      maxLen: Math.min(18, Math.max(4, Math.round(w * 0.42 + Math.min(k, 30) * 0.1))),
+      straight: Math.max(0.35, 0.6 - k * 0.005),
+      lenBias: Math.max(0.55, 0.95 - k * 0.01),
+    };
   }
 
   function levelSpec(n) {
@@ -205,11 +243,10 @@
     const k = n - 4;
     const round = Math.floor(k / pics.length);
     const pic = pics[k % pics.length];
-    const f = Math.min(2.3, 1 + round * 0.33);
-    const maxLen = Math.min(14, 4 + Math.floor(k / 3));
-    const straight = Math.max(0.35, 0.65 - k * 0.006);
-    const lenBias = Math.max(0.5, 1 - k * 0.01);
-    return { n, pic: pic.id, f, mirror: round % 2 === 1, minLen: 2, maxLen, straight, lenBias, seed };
+    // الدقة (عرض الرقعة بالخانات) تكبر تدريجياً: 12 ← 30
+    let w = Math.min(30, Math.round(16 + k * 0.4));
+    if (round >= 2) w = 26 + (seed % 5);
+    return Object.assign({ n, pic: pic.id, w, mirror: round % 2 === 1, seed }, arrowParams(w, k));
   }
 
   function dailySpec(dateStr) {
@@ -217,14 +254,16 @@
     const R = rng(seed);
     const pics = mainPics();
     const pic = pics[Math.floor(R() * pics.length)];
-    return { daily: dateStr, pic: pic.id, f: 1.45 + R() * 0.25, mirror: R() < 0.5, minLen: 2, maxLen: 12, straight: 0.45, lenBias: 0.7, seed };
+    const w = 22 + Math.floor(R() * 6);
+    return Object.assign({ daily: dateStr, pic: pic.id, w, mirror: R() < 0.5, seed }, arrowParams(w, 30));
   }
 
   function zenSpec(seedNum) {
     const R = rng(seedNum);
     const pics = mainPics();
     const pic = pics[Math.floor(R() * pics.length)];
-    return { zen: true, pic: pic.id, f: 1 + R() * 0.6, mirror: R() < 0.5, minLen: 2, maxLen: 8, straight: 0.55, seed: seedNum };
+    const w = 17 + Math.floor(R() * 8);
+    return Object.assign({ zen: true, pic: pic.id, w, mirror: R() < 0.5, seed: seedNum }, arrowParams(w, 8));
   }
 
   const api = { DIRS, rng, hashStr, buildBoard, fill, firstBlock, analyze, makeLevel, levelSpec, dailySpec, zenSpec, difficultyOf, mainPics };

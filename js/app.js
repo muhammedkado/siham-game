@@ -48,16 +48,12 @@
     for (let i = 0; i < src.W * src.H; i++) {
       if (!src.mask[i]) continue;
       const x = i % src.W, y = (i / src.W) | 0;
-      const g = Math.max(0.5, s * 0.06);
-      ctx.fillStyle = sil;
-      ctx.fillRect(ox + x * s, oy + y * s, s, s);
-      if (mode !== 'silhouette') {
-        ctx.fillStyle = src.color[i];
-        ctx.fillRect(ox + x * s + g / 2, oy + y * s + g / 2, s - g, s - g);
-      }
+      ctx.fillStyle = mode === 'silhouette' ? sil : src.color[i];
+      ctx.fillRect(Math.floor(ox + x * s), Math.floor(oy + y * s), Math.ceil(s) + 0.5, Math.ceil(s) + 0.5);
     }
   }
-  const picBoard = id => Gen.buildBoard(PICTURES.find(p => p.id === id), 1, false);
+  const picBoard = id => Gen.buildBoard(PICTURES.find(p => p.id === id), 32, false);
+  const picCount = () => Gen.mainPics().filter(p => S.pics[p.id]).length;
 
   // ——— الشاشات ———
   let current = 'home', prevScreen = 'home';
@@ -84,7 +80,7 @@
     document.body.dataset.theme = S.set.theme;
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.content = cssVar('--bg');
-    engine.setTheme({ bg: cssVar('--bg'), cell: cssVar('--cell'), ink: cssVar('--ink'), dot: cssVar('--sub'), accent: cssVar('--accent'), danger: cssVar('--danger'), ok: cssVar('--ok') });
+    engine.setTheme({ bg: cssVar('--bg'), cell: cssVar('--cell'), ink: cssVar('--ink'), dot: cssVar('--sub'), accent: cssVar('--accent'), danger: cssVar('--danger'), ok: cssVar('--ok'), edge: cssVar('--edge'), shadow: cssVar('--board-shadow'), ghost: parseFloat(cssVar('--ghost')) || 0.13 });
     Sound.setEnabled(S.set.sound);
     Music.setEnabled(S.set.music);
   }
@@ -93,11 +89,11 @@
   function totalStars() { return Object.values(S.stars).reduce((a, b) => a + b, 0); }
   function renderHome() {
     $('h-stars').textContent = totalStars();
-    $('h-pics').textContent = Object.keys(S.pics).length + '/' + Gen.mainPics().length;
+    $('h-pics').textContent = picCount() + '/' + Gen.mainPics().length;
     $('h-level').textContent = t('level') + ' ' + S.level;
     const spec = Gen.levelSpec(S.level);
     const cv = $('h-mystery');
-    drawPic(cv, Gen.buildBoard(PICTURES.find(p => p.id === spec.pic), 1, spec.mirror), 'silhouette');
+    drawPic(cv, Gen.buildBoard(PICTURES.find(p => p.id === spec.pic), spec.w || spec.f, spec.mirror), 'silhouette');
     $('h-daily').innerHTML = S.daily.last === today() ? t('dailyDone') : (S.daily.streak > 0 && S.daily.last === yesterday() ? icon('i-fire') + ' ' + t('streak') + ' ' + S.daily.streak : '+1 💡 +1 🔍');
   }
 
@@ -120,7 +116,7 @@
   function renderGallery() {
     const g = $('gal-grid');
     const pics = Gen.mainPics();
-    $('gal-count').textContent = Object.keys(S.pics).length + '/' + pics.length;
+    $('gal-count').textContent = picCount() + '/' + pics.length;
     g.innerHTML = pics.map(p => `<div class="gal ${S.pics[p.id] ? '' : 'locked'}"><canvas data-p="${p.id}"></canvas><span>${S.pics[p.id] ? p.name[S.set.lang] : '؟'}</span></div>`).join('');
     requestAnimationFrame(() => g.querySelectorAll('canvas').forEach(c => drawPic(c, picBoard(c.dataset.p), S.pics[c.dataset.p] ? 'full' : 'silhouette')));
   }

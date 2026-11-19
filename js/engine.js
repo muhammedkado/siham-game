@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   const DIRS = root.Gen.DIRS;
-  const FADE = 0.26;          // شفافية الخانات الفارغة من البداية (تلميح بسيط للوحة)
+  const FADE = 0;             // الخانات الفارغة تبدأ مثل باقي الرقعة (طيف خفيف + نقطة)
   const LINE = 0.16;          // سماكة خط السهم (بوحدة الخانة)
   const HEAD = 0.30;          // حجم رأس السهم
 
@@ -46,8 +46,22 @@
       this.reveal = new Float32Array(W * H);
       this.target = new Float32Array(W * H);
       for (let i = 0; i < W * H; i++) {
-        if (level.mask[i] && this.occ[i] < 0) { this.reveal[i] = FADE; this.target[i] = FADE; }
+        if (level.mask[i] && this.occ[i] < 0) { this.reveal[i] = 0; this.target[i] = 0; }
       }
+      // مسار شكل الرقعة وحدودها (للظل والإطار)
+      this.maskPath = new Path2D();
+      this.edgePath = new Path2D();
+      const m = (x, y) => x >= 0 && y >= 0 && x < W && y < H && level.mask[y * W + x];
+      for (let i = 0; i < W * H; i++) {
+        if (!level.mask[i]) continue;
+        const x = i % W, y = (i / W) | 0;
+        this.maskPath.rect(x - 0.01, y - 0.01, 1.02, 1.02);
+        if (!m(x, y - 1)) { this.edgePath.moveTo(x, y); this.edgePath.lineTo(x + 1, y); }
+        if (!m(x, y + 1)) { this.edgePath.moveTo(x, y + 1); this.edgePath.lineTo(x + 1, y + 1); }
+        if (!m(x - 1, y)) { this.edgePath.moveTo(x, y); this.edgePath.lineTo(x, y + 1); }
+        if (!m(x + 1, y)) { this.edgePath.moveTo(x + 1, y); this.edgePath.lineTo(x + 1, y + 1); }
+      }
+      this.particles = []; this.winFx = null;
       this.total = this.arrows.length;
       this.left = this.total;
       this.hearts = opts.hearts == null ? 3 : opts.hearts;
@@ -303,7 +317,15 @@
       if (this.left === 0 && !this.won && !exiting) {
         this.won = true;
         for (let i = 0; i < this.target.length; i++) if (this.L.mask[i]) this.target[i] = 1;
-        this.winT = 1.0; busy = true;
+        this.winT = 1.9; busy = true;
+        this.winFx = { t: 0 };
+        this._confetti();
+      }
+      if (this.winFx) { this.winFx.t += dt; if (this.winFx.t > 1.4) this.winFx = null; else busy = true; }
+      if (this.particles.length) {
+        for (const p of this.particles) { p.vy += 26 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt; p.life -= dt; }
+        this.particles = this.particles.filter(p => p.life > 0);
+        busy = true;
       }
       if (this.winT > 0) { this.winT -= dt; busy = true; if (this.winT <= 0) { this.winT = -1; if (this.h.onWin) this.h.onWin(); } }
       // الخسارة
@@ -323,29 +345,43 @@
       ctx.translate(v.ox + sh, v.oy);
       ctx.scale(v.s, v.s);
 
-      // الخلفية: ظل الشكل
+      // ظل ناعم تحت الرقعة
+      ctx.save();
+      ctx.translate(0.14, 0.22);
+      ctx.fillStyle = th.shadow || 'rgba(20,25,60,0.10)';
+      ctx.fill(this.maskPath);
+      ctx.restore();
+      // أرضية الرقعة
       ctx.fillStyle = th.cell;
+      ctx.fill(this.maskPath);
+      // اللوحة: طيف خفيف تحت الأسهم + الخانات المكشوفة بألوانها الكاملة
+      const ghost = th.ghost == null ? 0.13 : th.ghost;
       for (let i = 0; i < W * H; i++) {
         if (!L.mask[i]) continue;
+        const r = Math.max(ghost, this.reveal[i]);
         const x = i % W, y = (i / W) | 0;
-        ctx.fillRect(x - 0.002, y - 0.002, 1.004, 1.004);
-      }
-      // اللوحة المكشوفة
-      for (let i = 0; i < W * H; i++) {
-        const r = this.reveal[i];
-        if (r <= 0.01) continue;
-        const x = i % W, y = (i / W) | 0;
-        const sc = r >= 1 || r <= FADE + 0.001 ? 1 : 0.55 + 0.45 * easeOut((r - FADE) / (1 - FADE));
-        const sz = 0.94 * sc, off = (1 - sz) / 2;
         ctx.globalAlpha = Math.min(1, r);
         ctx.fillStyle = L.color[i];
-        roundRect(ctx, x + off, y + off, sz, sz, 0.2 * sz);
-        ctx.fill();
+        if (r >= 0.999) {
+          ctx.fillRect(x - 0.01, y - 0.01, 1.02, 1.02);   // بكسل متصل بدون فراغات
+        } else if (this.reveal[i] <= ghost) {
+          ctx.fillRect(x, y, 1, 1);                         // الطيف الخفيف
+        } else {
+          const e = easeOut((r - FADE) / (1 - FADE));
+          const sz = 0.6 + 0.42 * e, off = (1 - sz) / 2;
+          roundRect(ctx, x + off, y + off, sz, sz, 0.25 * sz * (1 - e));
+          ctx.fill();
+        }
       }
       ctx.globalAlpha = 1;
-      // نقاط خفيفة على الخانات الفارغة المكشوفة جزئياً
+      // إطار شكل الرقعة
+      ctx.strokeStyle = th.edge || th.cell;
+      ctx.lineWidth = Math.max(0.06, 1.2 / v.s);
+      ctx.lineCap = 'round';
+      ctx.stroke(this.edgePath);
+      // نقاط خفيفة على الخانات الفارغة
       ctx.fillStyle = th.dot || th.ink;
-      ctx.globalAlpha = 0.18;
+      ctx.globalAlpha = 0.16;
       for (let i = 0; i < W * H; i++) {
         if (!L.mask[i] || this.occ[i] >= 0 || this.reveal[i] > FADE + 0.05) continue;
         const x = i % W, y = (i / W) | 0;
@@ -387,7 +423,41 @@
       }
       // العدسة
       if (this.lens) this._drawLens(lw);
+      // لمعة الفوز تمر على اللوحة
+      if (this.winFx) {
+        const p = Math.min(1, this.winFx.t / 1.1);
+        const dx = 0.86, dy = 0.5, Lh = (W + H) * 0.75;
+        const cx = W / 2 + dx * (-Lh + 2 * Lh * easeInOut(p)), cy = H / 2 + dy * (-Lh + 2 * Lh * easeInOut(p));
+        const g = ctx.createLinearGradient(cx - dx * 3, cy - dy * 3, cx + dx * 3, cy + dy * 3);
+        g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, 'rgba(255,255,255,0.6)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.save(); ctx.clip(this.maskPath); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); ctx.restore();
+      }
+      // قصاصات الاحتفال
+      for (const pt of this.particles) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, pt.life / 0.4);
+        ctx.translate(pt.x, pt.y); ctx.rotate(pt.rot);
+        ctx.fillStyle = pt.c;
+        ctx.fillRect(-pt.s / 2, -pt.s * 0.3, pt.s, pt.s * 0.6);
+        ctx.restore();
+      }
       ctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
+
+    _confetti() {
+      const cols = [];
+      for (let i = 0; i < this.L.color.length; i++) if (this.L.color[i]) cols.push(this.L.color[i]);
+      const k = Math.max(this.W, this.H);
+      for (let i = 0; i < 70; i++) {
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2, sp = (0.5 + Math.random() * 0.7) * k * 1.1;
+        this.particles.push({
+          x: this.W / 2 + (Math.random() - 0.5) * this.W * 0.3, y: this.H * 0.55,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          rot: Math.random() * 6, vr: (Math.random() - 0.5) * 14,
+          s: k * (0.025 + Math.random() * 0.025), life: 1.4 + Math.random() * 0.8,
+          c: cols[(Math.random() * cols.length) | 0] || '#ffd166',
+        });
+      }
     }
 
     _arrow(pts, dir, col, lw) {
