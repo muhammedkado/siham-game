@@ -20,7 +20,15 @@
   const t = k => (I18N[S.set.lang] || I18N.ar)[k] || I18N.ar[k] || k;
 
   // ——— أدوات ———
-  function vibrate(ms) { if (S.set.vibe && navigator.vibrate) try { navigator.vibrate(ms); } catch (e) { /* ignore */ } }
+  // داخل تطبيق أندرويد: الاهتزاز ولون الأشرطة عبر جسر التطبيق (AndroidBridge)
+  const NATIVE = window.AndroidBridge || null;
+  function vibrate(ms) {
+    if (!S.set.vibe) return;
+    try {
+      if (NATIVE) NATIVE.vibrate(String([].concat(ms)));
+      else if (navigator.vibrate) navigator.vibrate(ms);
+    } catch (e) { /* ignore */ }
+  }
   let toastTimer = 0;
   function toast(msg, ms) {
     const el = $('toast');
@@ -82,6 +90,7 @@
     document.body.dataset.theme = S.set.theme;
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.content = cssVar('--bg');
+    if (NATIVE) try { NATIVE.setBars(cssVar('--bg'), S.set.theme === 'dark'); } catch (e) { /* ignore */ }
     engine.setTheme({ bg: cssVar('--bg'), cell: cssVar('--cell'), ink: cssVar('--ink'), dot: cssVar('--sub'), accent: cssVar('--accent'), danger: cssVar('--danger'), ok: cssVar('--ok'), edge: cssVar('--edge'), shadow: cssVar('--board-shadow'), ghost: parseFloat(cssVar('--ghost')) || 0.13 });
     Sound.setEnabled(S.set.sound);
     Music.setEnabled(S.set.music);
@@ -177,6 +186,7 @@
 
   // ——— الإعدادات ———
   function renderSettings() {
+    $('set-apk').classList.toggle('hidden', !!NATIVE || location.protocol === 'file:');
     document.querySelectorAll('#set-theme button').forEach(b => b.classList.toggle('on', b.dataset.v === S.set.theme));
     document.querySelectorAll('#set-lang button').forEach(b => b.classList.toggle('on', b.dataset.v === S.set.lang));
     $('set-music').checked = S.set.music;

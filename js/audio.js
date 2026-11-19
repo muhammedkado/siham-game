@@ -36,6 +36,9 @@
       if (!ctx) return;
       if (document.hidden) ctx.suspend(); else ctx.resume();
     });
+    // تطبيق أندرويد يستدعي هذه عند الخروج من التطبيق والرجوع له
+    root.__appPause = () => { if (ctx) ctx.suspend(); };
+    root.__appResume = () => { if (ctx && !document.hidden) ctx.resume(); };
     return ctx;
   }
   function ac() {
