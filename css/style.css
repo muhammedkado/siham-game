@@ -444,3 +444,4 @@ body[data-theme="dark"] .rk-row.top{background:linear-gradient(135deg,#3b2f12,#2
 .ac-who small{color:var(--ok);font-weight:700}
 .modal-card.busy{opacity:.7;pointer-events:none}
 .bottom-nav button{padding:5px 4px}
+.btn.poor{opacity:.55}
