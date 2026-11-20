@@ -76,7 +76,25 @@
       return minLen + Math.floor(u * (maxLen - minLen + 1));
     }
 
+    // لوضع "السلسلة": مين من الأسهم طريقه بيمر بكل خانة، ومين لسا ما في شي سادد طريقه
+    const rayOwners = params.chain ? Array.from({ length: W * H }, () => []) : null;
+    const blocked = [];
+    function commit(cells, ray, d) {
+      const id = arrows.length;
+      for (const c of cells) {
+        occ[c] = id;
+        if (rayOwners) for (const o of rayOwners[c]) blocked[o] = 1;
+      }
+      for (const c of ray) { rayMax[c] = id; if (rayOwners) rayOwners[c].push(id); }
+      arrows.push({ id, cells, dir: d });
+      blocked[id] = 0;
+      return true;
+    }
     function tryPlace(h, d, targetLen, allowSingle) {
+      const p = plan(h, d, targetLen, allowSingle);
+      return p ? commit(p.cells, p.ray, d) : false;
+    }
+    function plan(h, d, targetLen, allowSingle) {
       const hx = h % W, hy = (h / W) | 0;
       const [dx, dy] = DIRS[d];
       // 1) طريق الخروج يجب أن يكون خالياً
@@ -94,11 +112,7 @@
       if (!inG(bx, by) || !mask[b] || occ[b] >= 0 || !same(b, h)) {
         if (!allowSingle) return false;
         // سهم من خانة واحدة (لتفاصيل صغيرة مثل العيون)
-        const id = arrows.length;
-        occ[h] = id;
-        for (const c of ray) rayMax[c] = id;
-        arrows.push({ id, cells: [h], dir: d });
-        return true;
+        return { cells: [h], ray };
       }
       const path = [h, b];
       const used = new Set(path);
@@ -118,17 +132,57 @@
         }
         if (!moved) break;
       }
-      const id = arrows.length;
-      const cells = path.slice().reverse(); // من الذيل إلى الرأس
-      for (const c of cells) occ[c] = id;
-      for (const c of ray) rayMax[c] = id;
-      arrows.push({ id, cells, dir: d });
-      return true;
+      return { cells: path.slice().reverse(), ray }; // من الذيل إلى الرأس
+    }
+
+    /* وضع السلسلة (التحدي اليومي الصعب): كل سهم جديد يُختار بحيث يسدّ طريق أكبر عدد من الأسهم
+     * "الحرة" حتى الآن. بما إن الحل = عكس ترتيب الوضع، اللاعب يلاقي بأي لحظة سهم أو سهمين بس يقدر يحركهم. */
+    function chainFill() {
+      const k = params.chain;            // قوة السلسلة: عدد المرشحين لكل سهم
+      for (let guard = 0; guard < W * H; guard++) {
+        const free = [];
+        for (let a = 0; a < arrows.length; a++) if (!blocked[a]) free.push(a);
+        const targets = [];
+        for (const a of free) { const h = arrows[a].cells[arrows[a].cells.length - 1], [dx, dy] = DIRS[arrows[a].dir];
+          let x = h % W + dx, y = ((h / W) | 0) + dy;
+          while (inG(x, y)) { const i = y * W + x; if (mask[i] && occ[i] < 0) targets.push(i); x += dx; y += dy; } }
+        const empty = cells.filter(c => occ[c] < 0);
+        if (!empty.length) break;
+        let best = null, tried = 0;
+        // رؤوس مرشحة: كل خانات طرق الأسهم الحرة وجيرانها + عيّنة عشوائية
+        const heads = new Set(targets);
+        for (const c of targets) { const x = c % W, y = (c / W) | 0;
+          for (const [dx, dy] of DIRS) { const nx = x + dx, ny = y + dy; if (inG(nx, ny) && mask[ny * W + nx] && occ[ny * W + nx] < 0) heads.add(ny * W + nx); } }
+        const pool = shuffle(empty.slice(), R);
+        for (let t = 0; t < Math.min(pool.length, k); t++) heads.add(pool[t]);
+        const tries = [];
+        for (const h of heads) for (let d = 0; d < 4; d++) for (let r = 0; r < 2; r++) tries.push([h, d]);
+        for (const [h, d] of tries) {
+          {
+            const p = plan(h, d, params.chainLen ? 2 + Math.floor(R() * (params.chainLen - 1)) : sampleLen(), false);
+            if (!p) continue;
+            const hit = new Set();
+            for (const c of p.cells) for (const o of rayOwners[c]) if (!blocked[o]) hit.add(o);
+            // طريقه لازم يمرّ بخانات فاضية من الرسمة، وإلا بيضل حر للأبد (رأسه عالحافة لبرّا)
+            // سقف الأسهم الحرة: سهم بيزيدهم فوق السقف ما بينحط (الخانات الباقية بتكبر فيها ذيول الأسهم)
+            if (params.cap && free.length - hit.size + 1 > params.cap) continue;
+            const own = new Set(p.cells); let open = 0;
+            for (const c of p.ray) if (mask[c] && occ[c] < 0 && !own.has(c)) open++;
+            if (params.cap && !open && free.length - hit.size >= 1) continue;   // حر للأبد + في غيره حر = ممنوع
+            // الأفضل: يسد كل الحرّين (يبقى هو الحر الوحيد)، وطريقه قابل للسد، وبعدين الأطول
+            const sc = hit.size * 10 - (free.length - hit.size) * 25 - (open ? 0 : 60) + Math.min(open, 12) * 1.5 + p.cells.length * 0.3 + R() * 2;
+            tried++;
+            if (!best || sc > best.sc) best = { sc, p, d };
+          }
+        }
+        if (!best) break;
+        commit(best.p.cells, best.p.ray, best.d);
+      }
     }
 
     /* مدّ ذيل سهم موجود إلى خانة فارغة مجاورة.
      * آمن للحل: السهم A يُزال بعد كل الأسهم الموضوعة بعده، فيكفي ألا يمر طريق أي سهم لاحق بالخانة. */
-    const maxExt = Math.max(params.maxLen + 4, Math.round(params.maxLen * 1.6));
+    const maxExt = params.chain ? (params.maxExt || 30) : Math.max(params.maxLen + 4, Math.round(params.maxLen * 1.6));
     function extendPass() {
       let grown = 0;
       shuffle(cells, R);
@@ -154,6 +208,11 @@
 
     const cells = [];
     for (let i = 0; i < W * H; i++) if (mask[i]) cells.push(i);
+    if (params.chain) {
+      chainFill();
+      for (let e = 0; e < 40; e++) if (!extendPass()) break;
+      return arrows;
+    }
     for (let pass = 0; pass < 14; pass++) {
       shuffle(cells, R);
       let placed = 0;
@@ -203,6 +262,23 @@
     return { solvable: true, layers, firstFree };
   }
 
+  /** ضغط اللعب: كم سهم حر بكل لحظة لو اللاعب شال سهم حر وحدة وحدة */
+  function pressure(level, seed) {
+    const { W, H, arrows } = level, R = rng(seed || 1);
+    const occ = new Int32Array(W * H).fill(-1);
+    arrows.forEach(a => a.cells.forEach(c => { occ[c] = a.id; }));
+    let alive = arrows.slice(), sum = 0, max = 0, steps = 0, ones = 0;
+    while (alive.length) {
+      const free = alive.filter(a => !firstBlock(W, H, occ, a));
+      if (!free.length) return null;
+      sum += free.length; steps++; if (free.length > max) max = free.length; if (free.length <= 2) ones++;
+      const a = free[Math.floor(R() * free.length)];
+      a.cells.forEach(c => { occ[c] = -1; });
+      alive = alive.filter(x => x !== a);
+    }
+    return { avg: sum / steps, max, tight: ones / steps };
+  }
+
   function makeLevel(spec) {
     const pic = spec.board ? null : (PICS.PICTURES.find(p => p.id === spec.pic) || PICS.PICTURES[0]);
     const board = spec.board || buildBoard(pic, spec.w || spec.f, spec.mirror);
@@ -218,7 +294,8 @@
       if (!an.solvable) continue; // لا يحدث نظرياً
       const fillRatio = covered / cellsInMask;
       const freeRatio = an.firstFree / arrows.length;
-      const score = fillRatio * 2 - freeRatio + an.layers * 0.02;
+      let score = fillRatio * 2 - freeRatio + an.layers * 0.02;
+      if (spec.chain) { const pr = pressure(lvl, seed); score = fillRatio * 2 - pr.avg * 0.6 + pr.tight; }
       if (!best || score > best.score) best = { score, arrows, fillRatio, an };
     }
     return {
@@ -268,8 +345,17 @@
     const R = rng(seed);
     const pics = mainPics();
     const pic = pics[Math.floor(R() * pics.length)];
-    const w = 22 + Math.floor(R() * 6);
-    return Object.assign({ daily: dateStr, pic: pic.id, w, mirror: R() < 0.5, seed }, arrowParams(w, 30));
+    // صعب جداً ويصعب كل يوم: الرقعة تكبر، الأسهم أطول، وبأي لحظة سهم أو سهمين بس قابلين للحركة
+    const day = dailyIndex(dateStr);
+    const w = Math.min(36, 24 + Math.floor(day / 2) + Math.floor(R() * 3));
+    const chainLen = Math.min(9, 5 + Math.floor(day / 5));
+    return Object.assign({ daily: dateStr, day, pic: pic.id, w, mirror: R() < 0.5, seed, tries: 6 }, arrowParams(w, 30),
+      { chain: 40, cap: 2, chainLen, maxExt: 16 + chainLen * 2 });
+  }
+  /** رقم اليوم منذ إطلاق التحدي اليومي الصعب (20 نوفمبر 2026 = اليوم 1) */
+  function dailyIndex(dateStr) {
+    const [y, m, d] = String(dateStr).split('-').map(Number);
+    return Math.max(0, Math.round((Date.UTC(y, m - 1, d) - Date.UTC(2026, 10, 20)) / 864e5));
   }
 
   function zenSpec(seedNum) {
@@ -293,7 +379,7 @@
     return Object.assign({ custom: g.id, id: g.id, name: { ar: g.name, en: g.name }, board: g.board, seed: hashStr('siham-gift-' + g.id), tries: 3, love: true }, artParams(g.board.W));
   }
 
-  const api = { DIRS, rng, hashStr, buildBoard, fill, firstBlock, analyze, makeLevel, levelSpec, dailySpec, zenSpec, difficultyOf, mainPics, packPics, packSpec, customSpec };
+  const api = { DIRS, rng, hashStr, buildBoard, fill, firstBlock, analyze, pressure, makeLevel, levelSpec, dailySpec, dailyIndex, zenSpec, difficultyOf, mainPics, packPics, packSpec, customSpec };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Gen = api;
 })(typeof window !== 'undefined' ? window : globalThis);

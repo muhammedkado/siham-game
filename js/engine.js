@@ -51,6 +51,25 @@
         // في وضع الرسم بالأسهم: الخانات القليلة بدون أسهم تظهر بلونها من البداية حتى تكتمل الرسمة
         if (level.mask[i] && this.occ[i] < 0) { const v = this.art ? 1 : 0; this.reveal[i] = v; this.target[i] = v; }
       }
+      // الخانات اليتيمة (بدون أسهم) بالوضع العادي: كل وحدة "تابعة" لأقرب سهم وتنكشف لما يطلع،
+      // أو لما يمرّ رأس سهم فوقها وهو طالع
+      this.orphan = new Uint8Array(W * H);
+      this.orphOf = this.arrows.map(() => []);
+      if (!this.art) {
+        const near = new Int32Array(W * H).fill(-1), q = [];
+        for (let i = 0; i < W * H; i++) if (this.occ[i] >= 0) { near[i] = this.occ[i]; q.push(i); }
+        for (let h = 0; h < q.length; h++) {
+          const c = q[h], x = c % W, y = (c / W) | 0;
+          for (const [dx, dy] of DIRS) {
+            const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+            const n = ny * W + nx; if (near[n] < 0) { near[n] = near[c]; q.push(n); }
+          }
+        }
+        for (let i = 0; i < W * H; i++) if (level.mask[i] && this.occ[i] < 0) {
+          this.orphan[i] = 1;
+          if (near[i] >= 0) this.orphOf[near[i]].push(i); else this.target[i] = 1;
+        }
+      }
       // مسار شكل الرقعة وحدودها (للظل والإطار)
       this.maskPath = new Path2D();
       this.edgePath = new Path2D();
@@ -290,6 +309,16 @@
             an.revealed++;
           }
           if (p >= 1) for (const c of an.a.cells) this.target[c] = 1;
+          // رأس السهم يمسح الخانات اليتيمة اللي يمرّ فوقها
+          if (an.pk == null) an.pk = 1;
+          while (an.pk < 1e4 && u > an.pk - 0.3) {
+            const hc = an.a.cells[an.a.cells.length - 1], [dx, dy] = DIRS[an.a.dir];
+            const x = hc % this.W + dx * an.pk, y = ((hc / this.W) | 0) + dy * an.pk;
+            if (x < 0 || y < 0 || x >= this.W || y >= this.H) { an.pk = 1e4; break; }
+            if (this.orphan[y * this.W + x]) this.target[y * this.W + x] = 1;
+            an.pk++;
+          }
+          if (p >= 1) for (const c of this.orphOf[an.a.id] || []) this.target[c] = 1;
           if (!an.burst && u >= an.edgeU) {
             an.burst = true;
             const [dx, dy] = DIRS[an.a.dir], hp = an.a.pts[an.a.pts.length - 1];

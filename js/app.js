@@ -131,7 +131,7 @@
     const cv = $('h-mystery');
     drawPic(cv, Gen.buildBoard(PICTURES.find(p => p.id === spec.pic), spec.w || spec.f, spec.mirror), 'silhouette');
     $('h-pack').textContent = Gen.packPics().filter(p => S.pack[p.id]).length + '/' + Gen.packPics().length;
-    $('h-daily').innerHTML = S.daily.last === today() ? t('dailyDone') : (S.daily.streak > 0 && S.daily.last === yesterday() ? icon('i-fire') + ' ' + t('streak') + ' ' + S.daily.streak : '+1 💡 +1 🔍');
+    $('h-daily').innerHTML = S.daily.last === today() ? t('dailyDone') : (S.daily.streak > 0 && S.daily.last === yesterday() ? icon('i-fire') + ' ' + t('streak') + ' ' + S.daily.streak : t('dailyHard').replace('{n}', Gen.dailyIndex(today()) + 1));
   }
 
   // ——— المراحل ———
@@ -308,7 +308,8 @@
   function startDaily() {
     G.mode = 'daily'; G.n = 0;
     launch(Gen.makeLevel(Gen.dailySpec(today())), 3);
-    $('g-title').textContent = t('daily');
+    $('g-title').textContent = t('dailyDay').replace('{n}', Gen.dailyIndex(today()) + 1);
+    $('g-diff').textContent = t('insane');
   }
   function startZen() {
     G.mode = 'zen'; G.n = 0;
