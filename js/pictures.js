@@ -311,16 +311,8 @@
       blush(30, 55), blush(70, 55),
       E(38, 68, 7, 5, 0, 'W', OL), E(62, 68, 7, 5, 0, 'W', OL),
     ] },
-    { id: 'bunny', pack: 'animals', flat: 1, palette: AP, ratio: 1.45, w: 22, name: { ar: 'أرنوب', en: 'Bunny' }, view: [100, 124], shapes: [
-      E(33, 32, 10, 30, -8, 'W'), E(67, 32, 10, 30, 8, 'W'),
-      E(33, 35, 5, 21, -8, 'P', D), E(67, 35, 5, 21, 8, 'P', D),
-      E(50, 86, 38, 31, 0, 'W', OL),
-      ...eye(36, 86, 4, 5), ...eye(64, 86, 4, 5),
-      P([46.5, 93, 53.5, 93, 50, 96.5], 'P', DET),
-      Ln([50, 96, 50, 99], 1.6, 'K', DET), Ln([44, 101, 47, 103, 50, 99, 53, 103, 56, 101], 1.7, 'K', DET),
-      blush(26, 97, 5), blush(74, 97, 5),
-      E(38, 116, 8, 6, 0, 'W', OL), E(62, 116, 8, 6, 0, 'W', OL),
-    ] },
+    // مرسومة بـ Gemini ومحوّلة بـ tools/img2map.js (art-src/bunny.png)
+    { id: 'bunny', pack: 'animals', w: 24, name: { ar: 'أرنوب', en: 'Bunny' }, grid: {"W": 24, "H": 36, "pal": "261314fffffffd9cade88b8ff3e7d2", "data": "AAAAAIGBgQAAAAAAAAAAAACBgYEAAAAAAAAAgQICAoEAAAAAAAAAAIECAgKBAAAAAAAAgQICAoEAAAAAAAAAAIECAgKBAAAAAAAAgQICAgKBAAAAAAAAgQICAgKBAAAAAAAAgQICAgKBAAAAAAAAgQICAgICgQAAAACBAgIDAgKBAAAAAAAAgQICAwICgQAAAACBAgIDAwICgQAAAACBAgIDAwICgQAAAACBAgIDAwICgQAAAACBAgQDAwICgQAAAACBAgIDAwICgQAAAACBAgQDAwICgQAAAAAAgQIDAwMCgQAAAACBAgQDAwKBAAAAAAAAgQIDAwMCgQAAAACBAgMDAwKBAAAAAAAAgQIDAwMEBIEAAACBBAMDAwKBAAAAAAAAgQIDAwMEBIEAAIGCBAMDAwKBAAAAAAAAAIECAwMEBIEAAACBBAMDA4EAAAAAAAAAAIECAwMEgQAAAACBBAMDA4EAAAAAAAAAAIECAgICgYGBgYGBAgIDA4EAAAAAAAAAAACBAgICAgICAgICAgICgQAAAAAAAAAAAACBAgICAgICAgICAgICgQAAAAAAAAAAAIECAgICAgICAgICAgICAoGBAAAAAAAAgQICAgICAgICAgICAgICAgKBgQAAAACBAgICAgICAgICAgICAgICAgICgQAAAIECAgICAgICAgICAgICAgICAgICAoEAAIECAgICAgICAgICAgICAgICAgICAoEAgQICAgICAoECAgICAgICAoECAgICAgWBgQICAgICgYKBAgICAgICgYKBAgICAgWBgQICAgICgYGBAgICAgICgYGBAgICAgWBgQICAgICgYGBAgICAgICgYGBAgICAgWBgQICAgMCAoECAgICAgICAoECAgMCAgWBAIECAwMDAwICAgICAgICAgIDAwMDBYEAAIECAgMDAgICAoGBgYECAgICAgMFBYEAAACBAgICAgICAgICAgICAgICAgUFgQAAAAAAgQICAgICAgICAgICAgICBQWBgQAAAAAAAIEFBQICAgICAgICAgUFBYEAAAAAAAAAAACBBQUFBQUFBQUFBQUFgQAAAAAAAAAAAAAAgQUFBYGBgYEFBQUFgQAAAAAAAAAAAAAAgYGBgYEAAACBgYGBAAAAAAAA"} },
     { id: 'bear', pack: 'animals', flat: 1, palette: AP, w: 22, name: { ar: 'دبدوب', en: 'Teddy' }, view: [100, 92], shapes: [
       C(20, 24, 13, 'N'), C(80, 24, 13, 'N'), C(20, 24, 7, 'n', D), C(80, 24, 7, 'n', D),
       E(50, 54, 42, 36, 0, 'N', OL),
@@ -510,10 +502,23 @@
   }
 
   const rasterCache = {};
+  /** رقعة جاهزة (من صورة محوّلة): نفس ترميز روابط الهدايا — كل بايت = رقم اللون+1، والبت 128 = خانة ثابتة */
+  function fromGrid(g, mirror) {
+    const W = g.W, H = g.H, cols = g.pal.match(/[0-9a-f]{6}/gi).map(c => '#' + c.toLowerCase());
+    const b64 = g.data.replace(/-/g, '+').replace(/_/g, '/');
+    const bin = typeof atob === 'function' ? atob(b64) : Buffer.from(b64, 'base64').toString('binary');
+    const mask = new Uint8Array(W * H), color = new Array(W * H).fill(null), fixed = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const v = bin.charCodeAt(y * W + x), k = v & 127, j = y * W + (mirror ? W - 1 - x : x);
+      if (k && cols[k - 1]) { mask[j] = 1; color[j] = cols[k - 1]; fixed[j] = v & 128 ? 1 : 0; }
+    }
+    return { W, H, mask, color, fixed };
+  }
   /** يحوّل لوحة أشكال إلى رقعة: العرض ≤ size والارتفاع ≤ size×1.4 (يناسب شاشة الجوال الطولية) */
   function rasterize(pic, size, mirror) {
     const key = pic.id + '|' + size + '|' + (mirror ? 1 : 0);
     if (rasterCache[key]) return rasterCache[key];
+    if (pic.grid) return (rasterCache[key] = fromGrid(pic.grid, mirror));
     const [VW0, VH0] = pic.view || [100, 100];
     const shapes = pic.shapes.map(prep);
     // حدود الرسمة الفعلية

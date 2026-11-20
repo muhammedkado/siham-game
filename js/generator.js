@@ -31,7 +31,7 @@
 
   /** يحوّل اللوحة إلى رقعة: لوحات الأشكال تُرسم بعرض size خانة، ولوحات البكسل اليدوي تُكبَّر بالمعامل size */
   function buildBoard(pic, size, mirror) {
-    if (pic.shapes) return PICS.rasterize(pic, Math.max(6, Math.round(size)), mirror);
+    if (pic.shapes || pic.grid) return PICS.rasterize(pic, Math.max(6, Math.round(size)), mirror);
     const f = size;
     const th = pic.art.length;
     const tw = Math.max.apply(null, pic.art.map(r => r.length));
