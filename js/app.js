@@ -289,6 +289,8 @@
   // ——— النوافذ ———
   let modalOpen = null;
   function modal(html, actions, opts) {
+    $('modal-card').className = 'modal-card' + (opts && opts.cls ? ' ' + opts.cls : '');
+    $('modal-card').scrollTop = 0;
     $('modal-card').innerHTML = html;
     $('modal').classList.remove('hidden');
     modalOpen = Object.assign({ actions }, opts || {});
@@ -730,7 +732,7 @@
         const b = document.querySelector('#modal [data-a=bonus]');
         if (b) { b.disabled = true; b.textContent = coinsWon ? t('adDoubleDone') : t('adBonusDone'); }
       }),
-    });
+       }, { cls: 'win' });
     document.querySelectorAll('.m-stars .ico.on').forEach((el, i) => { el.style.animationDelay = (0.15 + i * 0.18) + 's'; });
     if (coinsWon) countUp($('m-coin-n'), coinsWon, 700);
     const scEl = $('m-score');

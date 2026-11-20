@@ -445,3 +445,41 @@ body[data-theme="dark"] .rk-row.top{background:linear-gradient(135deg,#3b2f12,#2
 .modal-card.busy{opacity:.7;pointer-events:none}
 .bottom-nav button{padding:5px 4px}
 .btn.poor{opacity:.55}
+
+/* ——— أزرار الرجوع والأيقونات: خلفية واضحة بكل الثيمات ——— */
+.icon-btn:not(.ghost){background:var(--glass);border:1.5px solid var(--glass-b);box-shadow:0 3px 10px rgba(0,0,0,.12);color:var(--ink)}
+body[data-theme="dark"] .icon-btn:not(.ghost){background:rgba(46,40,88,.92);border-color:rgba(255,255,255,.22);box-shadow:0 3px 12px rgba(0,0,0,.4);color:#fff}
+.icon-btn:not(.ghost):active{transform:scale(.94)}
+.icon-btn .ico{width:24px;height:24px}
+
+/* ——— نافذة الفوز المضغوطة: كل شيء يظهر بدون تمرير ——— */
+.modal-card.win{padding:14px 16px 0}
+.win h3{font-size:24px;margin:0}
+.win>p{margin:0 0 2px;font-size:14px}
+.modal-card.win canvas#m-pic{width:92px;height:92px;margin:2px auto 0}
+.win .m-stars{margin:0 0 4px}
+.win .m-stars .ico{width:30px;height:30px}
+.win .m-stars .ico:nth-child(2){width:38px;height:38px;margin-top:-6px}
+.win .m-stars+p{margin:-4px 0 4px!important;font-size:13px}
+.win .m-stats{display:grid;grid-template-columns:1fr 1fr;padding:4px;margin:0 0 6px;border-radius:16px}
+.win .m-stats>div{flex-direction:column;justify-content:center;gap:0;padding:4px 2px;font-size:12px}
+.win .m-stats>div+div{border-top:0}
+.win .m-stats>div:nth-child(n+3){border-top:1px solid rgba(128,100,60,.12)}
+.win .m-stats>div:nth-child(even){border-inline-start:1px solid rgba(128,100,60,.12)}
+.win .m-stats b{font-size:16px}
+.win .m-stats .st-rec{font-size:9.5px;padding:1px 6px}
+.win .m-chips{padding:5px 2px;margin:0 0 6px;border-radius:14px}
+.win .m-chips span{font-size:15px}
+.win .m-chips .ico{width:17px;height:17px}
+.win .m-coins{padding:4px 10px;margin:0 0 6px;border-radius:14px}
+.win .mc-rows{font-size:11.5px}
+.win .mc-total .ico{width:26px;height:26px}
+.win .mc-total b{font-size:26px}
+.win .m-reward{margin-bottom:6px;font-size:13px;padding:4px 10px}
+.win .m-path{margin:0 4px 8px}
+.win .m-path span{width:30px;height:30px;font-size:13px}
+.win .m-path span.cur{width:36px;height:36px;font-size:15px}
+.win .m-actions{position:sticky;bottom:0;z-index:2;display:flex;flex-direction:row;flex-wrap:wrap;gap:8px;background:var(--card);margin:0 -16px;padding:8px 16px 14px;box-shadow:0 -8px 12px -8px rgba(0,0,0,.12)}
+.win .m-actions .btn{flex:1 1 40%;padding:11px 6px;font-size:15px}
+.win .m-actions .btn.primary,.win .m-actions .chest-btn{flex-basis:100%}
+.win .m-actions .btn.primary{font-size:19px;padding:13px}
