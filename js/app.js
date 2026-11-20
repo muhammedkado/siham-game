@@ -368,7 +368,10 @@
       if (!pic || !(pic.shapes || pic.hd)) return;
       const sz = Math.max(6, Math.round(sp.w || sp.f)), r = rasterize(pic, sz, !!sp.mirror);
       if (r.W !== level.W || r.H !== level.H) return;
-      engine.hd = picHD(sp.pic, sz, sp.mirror, null, 32);
+      let bmpDone = false;
+      const toBmp = cv => { if (bmpDone || engine.L !== level || !window.createImageBitmap) return; bmpDone = true; createImageBitmap(cv).then(bm => { if (engine.L === level) engine.hdBmp = bm; }).catch(() => {}); };
+      engine.hd = picHD(sp.pic, sz, sp.mirror, toBmp, 32);
+      if (engine.hd && engine.hd._ready) toBmp(engine.hd);
     }, 450);
     idleArm();
     const cells = level.mask.reduce((a, b) => a + b, 0);
@@ -606,7 +609,7 @@
   }
 
   function onWin() {
-    Music.stop(); idleStop();
+    Music.stop(); idleStop(); engine.calm();
     Sound.win(); vibrate([20, 40, 20, 40, 60]);
     const stars = G.mode === 'zen' ? 3 : G.usedChance ? 1 : Math.max(1, 3 - engine.mistakes);
     if (G.mode !== 'pack' && G.mode !== 'gift') S.pics[G.level.pic] = 1;

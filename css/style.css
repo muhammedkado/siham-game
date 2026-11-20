@@ -84,7 +84,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;paddin
 .tool-ic{position:relative;width:60px;height:60px;border-radius:50%;background:var(--card);box-shadow:var(--shadow);display:grid;place-items:center;color:var(--ink);transition:background .2s,color .2s}
 .tool-ic .ico{width:28px;height:28px}
 .tool.armed .tool-ic{background:var(--accent);color:#fff;animation:pulse 1.1s infinite}
-@keyframes pulse{50%{box-shadow:0 0 0 8px color-mix(in srgb,var(--accent) 25%,transparent)}}
+@keyframes pulse{50%{transform:scale(1.08)}}
 .badge{position:absolute;top:-4px;inset-inline-end:-4px;min-width:24px;height:24px;border-radius:12px;background:var(--accent);color:#fff;font-style:normal;font-size:13px;font-weight:800;display:grid;place-items:center;padding:0 6px;border:2px solid var(--bg)}
 .badge.zero{background:var(--sub)}
 .badge:empty{display:none}
@@ -215,16 +215,16 @@ body[data-theme=dark] .pk.love{background:linear-gradient(135deg,#3d1d2b,#2a1a24
 @font-face{font-family:"Lalezar";src:url(../fonts/lalezar-ar.woff2) format("woff2");unicode-range:U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0898-08E1,U+08E3-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC;font-display:swap}
 @font-face{font-family:"Lalezar";src:url(../fonts/lalezar-lat.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-display:swap}
 :root{font-family:"Baloo",system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Arabic",Tahoma,sans-serif;
-  --glass:rgba(255,255,255,.72); --glass-b:rgba(255,255,255,.9); --bgimg:url(../img/bg-day.jpg); --wash:rgba(244,246,251,.55);
+  --glass:rgba(255,255,255,.86); --glass-b:rgba(255,255,255,.9); --bgimg:url(../img/bg-day.jpg); --wash:rgba(244,246,251,.66);
   --candy:linear-gradient(135deg,#ff5d8f 0%,#ff8a3d 55%,#ffc531 100%); --grape:linear-gradient(135deg,#7b5cff,#c04dff)}
-body[data-theme="dark"]{--glass:rgba(30,26,60,.62);--glass-b:rgba(255,255,255,.14);--bgimg:url(../img/bg-night.jpg);--wash:rgba(15,12,34,.5)}
-body[data-theme="sepia"]{--glass:rgba(251,245,233,.75);--glass-b:rgba(255,255,255,.8);--wash:rgba(243,234,216,.6)}
+body[data-theme="dark"]{--glass:rgba(30,26,60,.84);--glass-b:rgba(255,255,255,.14);--bgimg:url(../img/bg-night.jpg);--wash:rgba(15,12,34,.6)}
+body[data-theme="sepia"]{--glass:rgba(251,245,233,.9);--glass-b:rgba(255,255,255,.8);--wash:rgba(243,234,216,.6)}
 html,body{background:var(--bg)}
 #app::before{content:"";position:absolute;inset:0;background:var(--bgimg) center/cover no-repeat;z-index:-1;pointer-events:none}
 body[data-theme="sepia"] #app::before{filter:sepia(.55) saturate(.9)}
-#game::before,#levels::before,#gallery::before,#settings::before,#pack::before,#shop::before{content:"";position:absolute;inset:0;background:var(--wash);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);z-index:-1}
+#game::before,#levels::before,#gallery::before,#settings::before,#pack::before,#shop::before{content:"";position:absolute;inset:0;background:var(--wash);;z-index:-1}
 h1,h2,h3,.btn-primary.big>span,.floater b,.lv,.mc-total b{font-family:"Lalezar","Baloo",system-ui,sans-serif;font-weight:400}
-.stat-pill,.mode-card,.bottom-nav,.chip,.tool-ic,.lv,.gal,.pk,.set-group,.set-row,.btn-danger,.sh-card{background:var(--glass);border:1.5px solid var(--glass-b);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.stat-pill,.mode-card,.bottom-nav,.chip,.tool-ic,.lv,.gal,.pk,.set-group,.set-row,.btn-danger,.sh-card{background:var(--glass);border:1.5px solid var(--glass-b);}
 .modal-card{background:var(--card);border:2px solid var(--glass-b)}
 
 /* الشعار */
@@ -235,7 +235,7 @@ h1,h2,h3,.btn-primary.big>span,.floater b,.lv,.mc-total b{font-family:"Lalezar",
 body[data-theme="dark"] .logo h1{filter:drop-shadow(0 3px 0 #2a1450) drop-shadow(0 0 14px rgba(255,93,143,.55))}
 .tagline{font-weight:600}
 @keyframes bob{50%{transform:translateY(-5px) rotate(-3deg)}}
-.rank{display:inline-flex;align-items:center;gap:8px;margin-top:6px;background:var(--glass);border:1.5px solid var(--glass-b);border-radius:999px;padding:3px 12px 3px 6px;font-size:13px;backdrop-filter:blur(10px)}
+.rank{display:inline-flex;align-items:center;gap:8px;margin-top:6px;background:var(--glass);border:1.5px solid var(--glass-b);border-radius:999px;padding:3px 12px 3px 6px;font-size:13px}
 .rank b{background:var(--grape);color:#fff;border-radius:999px;padding:1px 10px;font-weight:800}
 .rk-track{width:70px;height:7px;background:rgba(0,0,0,.08);border-radius:9px;overflow:hidden}
 .rk-track span{display:block;height:100%;background:linear-gradient(90deg,#ffd166,#ff9f1c);border-radius:9px}
@@ -250,7 +250,7 @@ body[data-theme="dark"] .logo h1{filter:drop-shadow(0 3px 0 #2a1450) drop-shadow
 /* الغموض + الصندوق */
 .mystery canvas{filter:drop-shadow(0 10px 22px rgba(80,60,140,.18))}
 .mystery-label{font-weight:700}
-.chest-bar{display:flex;align-items:center;gap:8px;background:var(--glass);border:1.5px solid var(--glass-b);border-radius:999px;padding:5px 14px 5px 8px;backdrop-filter:blur(10px);min-width:220px;box-shadow:var(--shadow)}
+.chest-bar{display:flex;align-items:center;gap:8px;background:var(--glass);border:1.5px solid var(--glass-b);border-radius:999px;padding:5px 14px 5px 8px;min-width:220px;box-shadow:var(--shadow)}
 .chest-ic{width:30px;height:30px}
 .cb-track{flex:1;height:10px;border-radius:9px;background:rgba(0,0,0,.08);overflow:hidden}
 .cb-fill{display:block;height:100%;width:0;background:linear-gradient(90deg,#ffc531,#ff8a3d);border-radius:9px;transition:width .5s}
@@ -258,7 +258,7 @@ body[data-theme="dark"] .logo h1{filter:drop-shadow(0 3px 0 #2a1450) drop-shadow
 .chest-bar.ready{background:var(--candy);border-color:#fff;animation:chestCall 1.2s ease-in-out infinite}
 .chest-bar.ready small{color:#fff}.chest-bar.ready .cb-track{background:rgba(255,255,255,.35)}.chest-bar.ready .cb-fill{background:#fff}
 .chest-bar.ready .chest-ic{animation:wiggle .9s ease-in-out infinite}
-@keyframes chestCall{50%{transform:scale(1.05);box-shadow:0 8px 26px rgba(255,93,143,.5)}}
+@keyframes chestCall{50%{transform:scale(1.05)}}
 @keyframes wiggle{0%,100%{transform:rotate(0)}25%{transform:rotate(-12deg) scale(1.1)}75%{transform:rotate(12deg) scale(1.1)}}
 
 /* زر العب */
@@ -267,7 +267,7 @@ body[data-theme="dark"] .logo h1{filter:drop-shadow(0 3px 0 #2a1450) drop-shadow
 .btn-primary.big::before{content:"";position:absolute;left:8%;right:8%;top:4px;height:38%;border-radius:20px;background:linear-gradient(180deg,rgba(255,255,255,.45),rgba(255,255,255,0))}
 .btn-primary.big:active{transform:translateY(4px);box-shadow:0 2px 0 #d9466f,0 8px 18px rgba(255,93,143,.35)}
 .btn-primary.big small{font-family:"Baloo",sans-serif;font-weight:700}
-@keyframes shine{0%,55%{left:-60%}100%{left:130%}}
+@keyframes shine{0%,55%{transform:translateX(0) skewX(-20deg)}100%{transform:translateX(480%) skewX(-20deg)}}
 
 /* البطاقات */
 .mode-card{border-radius:22px}
@@ -367,3 +367,6 @@ body[data-theme="dark"] .ld.today{background:linear-gradient(135deg,#43213a,#3a2
 .mode-card{position:relative}
 .card-new{position:absolute;top:-7px;inset-inline-end:-4px;font-style:normal;font-size:11px;font-weight:800;color:#fff;background:linear-gradient(135deg,#ef4444,#ff8a3d);border:2px solid #fff;border-radius:999px;padding:0 8px;animation:pulseDot 1.6s infinite}
 .modal-card{max-height:calc(100% - 8px);overflow-y:auto}
+
+/* v2.3: أداء الجوال — بدون backdrop-filter، والرقعة طبقة لحالها */
+#board{will-change:transform}

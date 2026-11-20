@@ -37,7 +37,7 @@
     load(level, opts) {
       opts = opts || {};
       this.L = level;
-      this.hd = null; this.hdA = 0; this.wonT = 0; this.hdSweep = false;   // النسخة الناعمة (HD) اللي تظهر بعد الفوز
+      this.hd = null; this.hdBmp = null; this.hdA = 0; this.wonT = 0; this.hdSweep = false;   // النسخة الناعمة (HD) اللي تظهر بعد الفوز
       this.art = !!level.art;   // وضع "اللوحة من أسهم": كل سهم بلون الرسمة تحته
       const W = this.W = level.W, H = this.H = level.H;
       this.occ = new Int32Array(W * H).fill(-1);
@@ -100,7 +100,7 @@
     resize() {
       const p = this.c.parentElement;
       const w = Math.max(1, p.clientWidth), h = Math.max(1, p.clientHeight);
-      this.dpr = Math.min(3, root.devicePixelRatio || 1);
+      this.dpr = Math.min(2, root.devicePixelRatio || 1);   // 2 كافية للوضوح، و3 تضاعف شغل الجوال
       this.cw = w; this.ch = h;
       this.c.width = Math.round(w * this.dpr); this.c.height = Math.round(h * this.dpr);
       this.c.style.width = w + 'px'; this.c.style.height = h + 'px';
@@ -365,7 +365,7 @@
         for (let i = 0; i < this.target.length; i++) if (this.L.mask[i]) this.target[i] = 1;
         this.winT = this.hd ? 2.5 : 1.9; busy = true;
         this.sweep = { t: 0, dur: 1.1, a: 0.6 };
-        this.popFx = { t: 0, dur: 0.55, amp: 0.045 };
+        if (!this.hd) this.popFx = { t: 0, dur: 0.55, amp: 0.045 };
         this._confetti();
       }
       if (this.won && this.hd && this.hd._ready && this.hdA < 1) {
@@ -460,8 +460,7 @@
         ctx.save();
         ctx.globalAlpha = e;
         ctx.translate(W / 2, H / 2); ctx.scale(k, k); ctx.translate(-W / 2, -H / 2);
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(this.hd, 0, 0, W, H);
+        ctx.drawImage(this.hdBmp || this.hd, 0, 0, W, H);   // ImageBitmap: محفوظة على كرت الشاشة، ما بتنرفع كل فريم
         ctx.restore();
       }
       // نقاط خفيفة على الخانات الفارغة
@@ -639,6 +638,8 @@
     shimmer() { if (this.L && !this.won) { this.sweep = { t: 0, dur: 1.5, a: 0.32 }; this.kick(); } }
 
     setHot(h) { this.hot = h; }
+    /** يوقف كل المؤثرات (لما تنفتح نافذة الفوز) كي ما يضل الكانفس يترسم تحتها */
+    calm() { this.particles = []; this.rings = []; this.sweep = null; this.popFx = null; if (this.hd) this.hdA = 1; this.kick(); }
 
     _confetti() {
       const love = this.L.spec && this.L.spec.love;
