@@ -30,8 +30,8 @@
   }
 
   /** يحوّل اللوحة إلى رقعة: لوحات الأشكال تُرسم بعرض size خانة، ولوحات البكسل اليدوي تُكبَّر بالمعامل size */
-  function buildBoard(pic, size, mirror) {
-    if (pic.shapes || pic.grid) return PICS.rasterize(pic, Math.max(6, Math.round(size)), mirror);
+  function buildBoard(pic, size, mirror, soft) {
+    if (pic.shapes || pic.grid) return PICS.rasterize(pic, Math.max(6, Math.round(size)), mirror, soft);
     const f = size;
     const th = pic.art.length;
     const tw = Math.max.apply(null, pic.art.map(r => r.length));
@@ -120,7 +120,7 @@
       while (path.length < targetLen) {
         const left = (wd + 3) % 4, right = (wd + 1) % 4;
         const lr = R() < 0.5 ? [left, right] : [right, left];
-        const order = R() < params.straight ? [wd, lr[0], lr[1]] : [lr[0], lr[1], wd];
+        const order = params.straightOnly ? [wd] : R() < params.straight ? [wd, lr[0], lr[1]] : [lr[0], lr[1], wd];
         let moved = false;
         for (const nd of order) {
           const nx = px + DIRS[nd][0], ny = py + DIRS[nd][1];
@@ -182,7 +182,7 @@
 
     /* مدّ ذيل سهم موجود إلى خانة فارغة مجاورة.
      * آمن للحل: السهم A يُزال بعد كل الأسهم الموضوعة بعده، فيكفي ألا يمر طريق أي سهم لاحق بالخانة. */
-    const maxExt = params.chain ? (params.maxExt || 30) : Math.max(params.maxLen + 4, Math.round(params.maxLen * 1.6));
+    const maxExt = params.maxExt ? params.maxExt : params.chain ? 30 : Math.max(params.maxLen + 4, Math.round(params.maxLen * 1.6));
     function extendPass() {
       let grown = 0;
       shuffle(cells, R);
@@ -198,7 +198,10 @@
           const a = arrows[o];
           if (a.cells.length >= maxExt) continue;
           // ذيل: آمن إذا ما في سهم لاحق طريقه بيمر بالخانة
-          if (a.cells[0] === ny * W + nx && rayMax[c] < o && same(c, a.cells[0])) opts.push([a, 0]);
+          const tl = a.cells[0];
+          // بالأسهم المستقيمة: الذيل يكبر بنفس الخط بس
+          const inLine = !params.straightOnly || (cx === nx - DIRS[a.dir][0] && cy === ny - DIRS[a.dir][1]);
+          if (tl === ny * W + nx && inLine && rayMax[c] < o && same(c, tl)) opts.push([a, 0]);
           // رأس: السهم يتقدم خانة لقدام بطريقه، آمن إذا ما في سهم لاحق طريقه بيمر فيها
           const hd = a.cells[a.cells.length - 1];
           if (params.head !== false && hd === ny * W + nx && cx === nx + DIRS[a.dir][0] && cy === ny + DIRS[a.dir][1] && rayMax[c] === o && same(c, hd)) opts.push([a, 1]);
@@ -218,8 +221,20 @@
       for (let e = 0; e < 40; e++) if (!extendPass()) break;
       return arrows;
     }
+    // من الداخل للخارج: الخانات العميقة تاخد أسهمها أولاً (طرقها لسا فاضية)، فالرسمة تتعبى كلها
+    let depth = null;
+    if (params.inside) {
+      depth = new Float32Array(W * H).fill(-1); const q = [];
+      for (const c of cells) { const x = c % W, y = (c / W) | 0;
+        if (DIRS.some(([dx, dy]) => !inG(x + dx, y + dy) || !mask[(y + dy) * W + x + dx])) { depth[c] = 0; q.push(c); } }
+      for (let k = 0; k < q.length; k++) { const c = q[k], x = c % W, y = (c / W) | 0;
+        for (const [dx, dy] of DIRS) { const nx = x + dx, ny = y + dy; if (!inG(nx, ny)) continue; const n = ny * W + nx;
+          if (mask[n] && depth[n] < 0) { depth[n] = depth[c] + 1; q.push(n); } } }
+      for (const c of cells) depth[c] += R() * params.inside;
+    }
     for (let pass = 0; pass < 14; pass++) {
       shuffle(cells, R);
+      if (depth) cells.sort((a, b) => depth[b] - depth[a]);
       let placed = 0;
       for (const h of cells) {
         if (occ[h] >= 0) continue;
@@ -227,7 +242,7 @@
         const L = pass < 3 ? sampleLen() : 2 + Math.floor(R() * 3);
         let ok = false;
         for (const d of dirs) { if (tryPlace(h, d, L, false)) { placed++; ok = true; break; } }
-        if (!ok && params.single && pass >= 2) for (const d of dirs) { if (tryPlace(h, d, 1, true)) { placed++; break; } }
+        if (!ok && params.single && pass >= (params.singleFrom == null ? 2 : params.singleFrom)) for (const d of dirs) { if (tryPlace(h, d, 1, true)) { placed++; break; } }
       }
       const grown = pass >= 1 ? extendPass() + extendPass() : 0;
       if (!placed && !grown) break;
@@ -286,7 +301,9 @@
 
   function makeLevel(spec) {
     const pic = spec.board ? null : (PICS.PICTURES.find(p => p.id === spec.pic) || PICS.PICTURES[0]);
-    const board = spec.board || buildBoard(pic, spec.w || spec.f, spec.mirror);
+    let board = spec.board || buildBoard(pic, spec.w || spec.f, spec.mirror, spec.gem);
+    // الأسلوب اللامع: كل خانة سهم، حتى الحدود والعيون
+    if (spec.gem && board.fixed) board = Object.assign({}, board, { fixed: null });
     const cellsInMask = Math.max(1, board.mask.reduce((s, v, i) => s + (v && !(spec.lock && board.fixed && board.fixed[i]) ? 1 : 0), 0));
     let best = null;
     const tries = spec.tries || 8;
@@ -305,7 +322,7 @@
     }
     return {
       W: board.W, H: board.H, mask: board.mask, color: board.color, fixed: board.fixed,
-      arrows: best.arrows, pic: pic ? pic.id : spec.id, picName: pic ? pic.name : spec.name, art: !!spec.art,
+      arrows: best.arrows, pic: pic ? pic.id : spec.id, picName: pic ? pic.name : spec.name, art: !!spec.art, gem: !!spec.gem,
       fillRatio: best.fillRatio, layers: best.an.layers, spec,
     };
   }
@@ -373,18 +390,29 @@
 
   // ——— حزمة "حيوانات من أسهم": الأسهم ملوّنة وترسم الحيوان بنفسها ———
   const artParams = w => ({ minLen: 2, maxLen: Math.min(16, Math.round(w * 0.5)), straight: 0.45, lenBias: 0.7, lock: true, single: true, art: true });
-  function packPics() { return PICS.packPics('animals'); }
+  // الأسلوب اللامع (متل صورة الفطر والتفاحة): أسهم قصيرة مستقيمة، كل خانة بلون اللوحة مع تظليلها
+  const gemParams = () => ({ inside: 1.5, minLen: 2, maxLen: 2, straight: 1, straightOnly: true, lenBias: 1, lock: true, single: true, art: true, gem: true, maxExt: 2, singleFrom: 0 });
+  // الحزمة: الحيوانات أولاً ثم كل لوحات الرحلة، كلها بالأسلوب اللامع
+  function packPics() { return PICS.packPics('animals').concat(PICS.mainPics()); }
+  // عرض اللوحة: أكبر شي لحد 18 خانة بشرط ما تزيد الخانات عن ~300 (كي ما يصير عدد الأسهم كبير كتير)
+  const packWCache = {};
+  const packW = pic => {
+    if (packWCache[pic.id]) return packWCache[pic.id];
+    let w = Math.min(pic.w || 18, 18);
+    while (w > 12 && buildBoard(pic, w, false, true).mask.reduce((a, v) => a + v, 0) > 300) w--;
+    return (packWCache[pic.id] = w);
+  };
+  function packBoard(i) { const pic = packPics()[i]; return Object.assign({}, buildBoard(pic, packW(pic), false, true), { fixed: null }); }
   function packSpec(i) {
     const pic = packPics()[i];
-    const w = pic.w || 24;
-    return Object.assign({ pack: i, pic: pic.id, w, seed: hashStr('siham-pack-' + pic.id), tries: 3 }, artParams(w));
+    return Object.assign({ pack: i, pic: pic.id, w: packW(pic), seed: hashStr('siham-gem-' + pic.id), tries: 3 }, gemParams());
   }
   /** خريطة خاصة من رابط هدية: الرقعة جاهزة */
   function customSpec(g) {
     return Object.assign({ custom: g.id, id: g.id, name: { ar: g.name, en: g.name }, board: g.board, seed: hashStr('siham-gift-' + g.id), tries: 3, love: true }, artParams(g.board.W));
   }
 
-  const api = { DIRS, rng, hashStr, buildBoard, fill, firstBlock, analyze, pressure, makeLevel, levelSpec, dailySpec, dailyIndex, zenSpec, difficultyOf, mainPics, packPics, packSpec, customSpec };
+  const api = { DIRS, rng, hashStr, buildBoard, fill, firstBlock, analyze, pressure, makeLevel, levelSpec, dailySpec, dailyIndex, zenSpec, difficultyOf, mainPics, packPics, packBoard, packSpec, customSpec };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Gen = api;
 })(typeof window !== 'undefined' ? window : globalThis);

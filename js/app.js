@@ -191,7 +191,7 @@
     }));
     requestAnimationFrame(() => g.querySelectorAll('.pk').forEach(b => {
       const k = b.dataset.k;
-      const board = k[0] === 'g' ? gl.find(x => x.id === k.slice(2)).board : Gen.buildBoard(pics[+k.slice(2)], pics[+k.slice(2)].w, false);
+      const board = k[0] === 'g' ? gl.find(x => x.id === k.slice(2)).board : Gen.packBoard(+k.slice(2));
       drawPic(b.querySelector('canvas'), board, 'full');
     }));
   }

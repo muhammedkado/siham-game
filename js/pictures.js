@@ -312,7 +312,7 @@
       E(38, 68, 7, 5, 0, 'W', OL), E(62, 68, 7, 5, 0, 'W', OL),
     ] },
     // مرسومة بـ Gemini ومحوّلة بـ tools/img2map.js (art-src/bunny.png)
-    { id: 'bunny', pack: 'animals', w: 24, name: { ar: 'أرنوب', en: 'Bunny' }, grid: {"W": 24, "H": 36, "pal": "261314fffffffd9cade88b8ff3e7d2", "data": "AAAAAIGBgQAAAAAAAAAAAACBgYEAAAAAAAAAgQICAoEAAAAAAAAAAIECAgKBAAAAAAAAgQICAoEAAAAAAAAAAIECAgKBAAAAAAAAgQICAgKBAAAAAAAAgQICAgKBAAAAAAAAgQICAgKBAAAAAAAAgQICAgICgQAAAACBAgIDAgKBAAAAAAAAgQICAwICgQAAAACBAgIDAwICgQAAAACBAgIDAwICgQAAAACBAgIDAwICgQAAAACBAgQDAwICgQAAAACBAgIDAwICgQAAAACBAgQDAwICgQAAAAAAgQIDAwMCgQAAAACBAgQDAwKBAAAAAAAAgQIDAwMCgQAAAACBAgMDAwKBAAAAAAAAgQIDAwMEBIEAAACBBAMDAwKBAAAAAAAAgQIDAwMEBIEAAIGCBAMDAwKBAAAAAAAAAIECAwMEBIEAAACBBAMDA4EAAAAAAAAAAIECAwMEgQAAAACBBAMDA4EAAAAAAAAAAIECAgICgYGBgYGBAgIDA4EAAAAAAAAAAACBAgICAgICAgICAgICgQAAAAAAAAAAAACBAgICAgICAgICAgICgQAAAAAAAAAAAIECAgICAgICAgICAgICAoGBAAAAAAAAgQICAgICAgICAgICAgICAgKBgQAAAACBAgICAgICAgICAgICAgICAgICgQAAAIECAgICAgICAgICAgICAgICAgICAoEAAIECAgICAgICAgICAgICAgICAgICAoEAgQICAgICAoECAgICAgICAoECAgICAgWBgQICAgICgYKBAgICAgICgYKBAgICAgWBgQICAgICgYGBAgICAgICgYGBAgICAgWBgQICAgICgYGBAgICAgICgYGBAgICAgWBgQICAgMCAoECAgICAgICAoECAgMCAgWBAIECAwMDAwICAgICAgICAgIDAwMDBYEAAIECAgMDAgICAoGBgYECAgICAgMFBYEAAACBAgICAgICAgICAgICAgICAgUFgQAAAAAAgQICAgICAgICAgICAgICBQWBgQAAAAAAAIEFBQICAgICAgICAgUFBYEAAAAAAAAAAACBBQUFBQUFBQUFBQUFgQAAAAAAAAAAAAAAgQUFBYGBgYEFBQUFgQAAAAAAAAAAAAAAgYGBgYEAAACBgYGBAAAAAAAA"} },
+    { id: 'bunny', pack: 'animals', w: 17, name: { ar: 'أرنوب', en: 'Bunny' }, grid: {"W": 17, "H": 26, "pal": "261314fffffffd9cade88b8ff3e7d2", "data": "AAAAgYEAAAAAAAAAgYEAAAAAAIECAoEAAAAAAIECAoEAAAAAgQICgQAAAAAAgQICgQAAAACBAgIDgQAAAIEEAgKBAAAAAIEDAwOBAAAAgQQDA4EAAAAAgQMDBIEAAACBBAMDgQAAAACBAwMEgQAAAIEEAwOBAAAAAIEDAwSBAAAAgQQDA4EAAAAAgQMDBIEAAACBBAMDgQAAAAAAgQMEgQAAAIEEAwOBAAAAAACBAwSBAAAAgQQDgQAAAAAAAIECBAKBgYECBAKBAAAAAAAAgQICAgICAgICAoEAAAAAAIECAgICAgICAgICAoEAAACBAgICAgICAgICAgICAoEAAIECAgICAgICAgICAgICgQCBAgICAoECAgICAoECAgICgYECAgKBgoECAgKBgoECAgKBgQICAoGBgQICAoGBgQICAoGBAgIDA4ECAgICAoEDAwICgQCBAwMDAgKBgQICAgMDA4EAAIECAgICAgICAgICAgICgQAAAIECAgICAgICAgIFBYEAAAAAAIEFBQUCAgUFBQWBAAAAAAAAAIEFBYGBgQUFgQAAAAAAAAAAAIGBAAAAgYEAAAAAAA"} },
     { id: 'bear', pack: 'animals', flat: 1, palette: AP, w: 22, name: { ar: 'دبدوب', en: 'Teddy' }, view: [100, 92], shapes: [
       C(20, 24, 13, 'N'), C(80, 24, 13, 'N'), C(20, 24, 7, 'n', D), C(80, 24, 7, 'n', D),
       E(50, 54, 42, 36, 0, 'N', OL),
@@ -515,8 +515,8 @@
     return { W, H, mask, color, fixed };
   }
   /** يحوّل لوحة أشكال إلى رقعة: العرض ≤ size والارتفاع ≤ size×1.4 (يناسب شاشة الجوال الطولية) */
-  function rasterize(pic, size, mirror) {
-    const key = pic.id + '|' + size + '|' + (mirror ? 1 : 0);
+  function rasterize(pic, size, mirror, soft) {
+    const key = pic.id + '|' + size + '|' + (mirror ? 1 : 0) + (soft ? '|s' : '');
     if (rasterCache[key]) return rasterCache[key];
     if (pic.grid) return (rasterCache[key] = fromGrid(pic.grid, mirror));
     const [VW0, VH0] = pic.view || [100, 100];
@@ -574,7 +574,7 @@
     for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) own[y * W2 + x] = owner[(y + minY) * W + x + minX];
     // الضوء من الأعلى-يسار على الشاشة
     const Lx = mirror ? -0.55 : 0.55, Ly = 0.83;
-    const outline = W2 >= 13;
+    const outline = W2 >= 13 && !soft;   // soft: بدون حدود داكنة (لوحة كلها أسهم لامعة)
     for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) {
       const i = y * W2 + x, o = own[i];
       if (o < 0) continue;
@@ -594,7 +594,7 @@
         else if (l < -0.62 && dx * dx + dy * dy < 0.95) t = 3;
       }
       if (outline && nb.some(v => v < 0)) t = 0;
-      else if (s.ol && nb.some(v => v >= 0 && v < o && (shapes[v].g || v) !== (s.g || o) && shapes[v].c !== s.c)) t = 0;
+      else if (!soft && s.ol && nb.some(v => v >= 0 && v < o && (shapes[v].g || v) !== (s.g || o) && shapes[v].c !== s.c)) t = 0;
       color[i] = tone(base, t);
       if (t === 0 || (s.pri || 1) >= 4) fixed[i] = 1;
     }

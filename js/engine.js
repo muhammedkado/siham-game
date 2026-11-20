@@ -49,13 +49,13 @@
       this.target = new Float32Array(W * H);
       for (let i = 0; i < W * H; i++) {
         // في وضع الرسم بالأسهم: الخانات القليلة بدون أسهم تظهر بلونها من البداية حتى تكتمل الرسمة
-        if (level.mask[i] && this.occ[i] < 0) { const v = this.art ? 1 : 0; this.reveal[i] = v; this.target[i] = v; }
+        if (level.mask[i] && this.occ[i] < 0) { const v = this.art && !level.gem ? 1 : 0; this.reveal[i] = v; this.target[i] = v; }
       }
       // الخانات اليتيمة (بدون أسهم) بالوضع العادي: كل وحدة "تابعة" لأقرب سهم وتنكشف لما يطلع،
       // أو لما يمرّ رأس سهم فوقها وهو طالع
       this.orphan = new Uint8Array(W * H);
       this.orphOf = this.arrows.map(() => []);
-      if (!this.art) {
+      if (!this.art || level.gem) {
         const near = new Int32Array(W * H).fill(-1), q = [];
         for (let i = 0; i < W * H; i++) if (this.occ[i] >= 0) { near[i] = this.occ[i]; q.push(i); }
         for (let h = 0; h < q.length; h++) {
@@ -414,7 +414,7 @@
       ctx.fillStyle = th.cell;
       ctx.fill(this.maskPath);
       // اللوحة: طيف خفيف تحت الأسهم + الخانات المكشوفة بألوانها الكاملة
-      const ghost = this.art ? 0.3 : th.ghost == null ? 0.13 : th.ghost;
+      const ghost = L.gem ? 0.2 : this.art ? 0.3 : th.ghost == null ? 0.13 : th.ghost;
       for (let i = 0; i < W * H; i++) {
         if (!L.mask[i]) continue;
         const r = Math.max(ghost, this.reveal[i]);
@@ -455,7 +455,8 @@
       const pulse = 0.5 + 0.5 * Math.sin(this.time * 7);
 
       // الأسهم الثابتة
-      if (this.art) this._artArrows(v, animIds, pulse);
+      if (L.gem) this._gemArrows(animIds, pulse);
+      else if (this.art) this._artArrows(v, animIds, pulse);
       else for (const a of this.arrows) {
         if (!a.alive || animIds.has(a.id)) continue;
         let col = th.ink, w = lw;
@@ -489,6 +490,12 @@
           }
         }
         ctx.globalAlpha = alpha;
+        if (L.gem) {
+          const [dx, dy] = DIRS[an.a.dir], ov = an.type === 'bump' && this.flash.has(an.a.id) ? th.danger : null;
+          this._gemBatch([{ a: an.a, ox: dx * u, oy: dy * u, col: ov }]);
+          ctx.globalAlpha = 1;
+          continue;
+        }
         if (this.art) {
           this._artMoving(an, u, v, an.type === 'bump' && this.flash.has(an.a.id) ? th.danger : null);
           ctx.globalAlpha = 1;
@@ -637,6 +644,62 @@
     }
 
     // ——— رسم الأسهم الملوّنة (أنبوب بلون الرسمة + حافة أغمق) ———
+    // ——— الأسلوب اللامع: أسهم مستقيمة قصيرة ممتلئة بلمعة وظل (متل حبات الحلوى) ———
+    _gemArrows(animIds, pulse) {
+      const th = this.theme, ln = this.lens, ctx = this.ctx, items = [];
+      for (const a of this.arrows) {
+        if (!a.alive || animIds.has(a.id)) continue;
+        let col = null;
+        if (this.trace === a.id || (this.hint && this.hint.id === a.id)) col = th.accent;
+        if (this.flash.has(a.id)) col = th.danger;
+        if (ln && ln.block && ln.block.id === a.id) col = th.danger;
+        if (ln && ln.id === a.id) col = ln.block ? th.danger : th.ok;
+        if (this.hint && this.hint.id === a.id) {
+          // هالة نابضة حول سهم التلميح
+          const p = a.pts, [dx, dy] = DIRS[a.dir];
+          ctx.strokeStyle = th.accent; ctx.globalAlpha = 0.25 + 0.3 * pulse; ctx.lineWidth = 1.05; ctx.lineCap = 'round';
+          strokePoly(ctx, [[p[0][0] - dx * 0.3, p[0][1] - dy * 0.3], [p[p.length - 1][0] + dx * 0.3, p[p.length - 1][1] + dy * 0.3]]);
+          ctx.globalAlpha = 1;
+        }
+        items.push({ a, ox: 0, oy: 0, col });
+      }
+      this._gemBatch(items);
+    }
+
+    /** يرسم مجموعة أسهم لامعة دفعة وحدة (مجمّعة حسب اللون لسرعة الرسم) */
+    _gemBatch(items) {
+      const ctx = this.ctx, shadow = new Path2D(), gloss = new Path2D(), by = new Map();
+      const grp = c => { let g = by.get(c); if (!g) { g = { body: new Path2D(), depth: new Path2D(), hi: new Path2D() }; by.set(c, g); } return g; };
+      for (const it of items) {
+        const a = it.a, n = a.cells.length, [dx, dy] = DIRS[a.dir];
+        const [x, y] = a.pts[0], X = x + it.ox, Y = y + it.oy;
+        const c = it.col || a.cols[n - 1], g = grp(c);
+        const s0 = -0.4, tip = n - 1 + 0.44, hb = tip - 0.46, t = 0.25, hw = 0.46;
+        const add = (path, ox, oy, k, up) => {
+          // k: تصغير حول المحور، up: إزاحة لفوق (للمعة)
+          const P = (aa, bb) => [X + ox + dx * aa - dy * bb * k, Y + oy + dy * aa + dx * bb * k - up];
+          const pts = [P(s0 + (1 - k) * 0.25, -t), P(hb, -t), P(hb, -hw), P(tip - (1 - k) * 0.3, 0), P(hb, hw), P(hb, t), P(s0 + (1 - k) * 0.25, t)];
+          path.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) path.lineTo(pts[i][0], pts[i][1]); path.closePath();
+        };
+        add(shadow, 0.05, 0.1, 1, 0);
+        add(g.depth, 0, 0.075, 1, 0);
+        add(g.body, 0, 0, 1, 0);
+        add(g.hi, 0, 0, 0.5, 0.075);
+        // لمعة بيضا صغيرة عند الذيل
+        const gx = X + dx * (s0 + 0.16), gy = Y + dy * (s0 + 0.16) - 0.12;
+        gloss.moveTo(gx - Math.abs(dx) * 0.0 - 0.07, gy); gloss.lineTo(gx + 0.07, gy);
+      }
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.lineWidth = 0.12;
+      ctx.fillStyle = ctx.strokeStyle = 'rgba(40,20,40,0.16)'; ctx.fill(shadow); ctx.stroke(shadow);
+      for (const [c, g] of by) { ctx.fillStyle = ctx.strokeStyle = edgeOf(c); ctx.fill(g.depth); ctx.stroke(g.depth); }
+      for (const [c, g] of by) { ctx.fillStyle = ctx.strokeStyle = c; ctx.fill(g.body); ctx.stroke(g.body); }
+      ctx.lineWidth = 0.06;
+      const ga = ctx.globalAlpha;
+      for (const [c, g] of by) { ctx.globalAlpha = ga * 0.7; ctx.fillStyle = ctx.strokeStyle = lightOf(c); ctx.fill(g.hi); ctx.stroke(g.hi); }
+      ctx.globalAlpha = ga * 0.85; ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.075; ctx.stroke(gloss);
+      ctx.globalAlpha = ga;
+    }
+
     _artW(v) { return { tw: Math.max(0.34, 2.4 / v.s), ow: Math.max(0.06, 1 / v.s) }; }
 
     _artArrows(v, animIds, pulse) {
@@ -854,6 +917,16 @@
     else { r *= 0.66; g *= 0.66; b *= 0.68; }
     e = '#' + [r, g, b].map(x => Math.round(x).toString(16).padStart(2, '0')).join('');
     edgeCache[hex] = e;
+    return e;
+  }
+  const lightCache = {};
+  function lightOf(hex) {
+    let e = lightCache[hex];
+    if (e) return e;
+    const n = parseInt(String(hex).slice(1, 7), 16) || 0;
+    const m = v => Math.round(v + (255 - v) * 0.42).toString(16).padStart(2, '0');
+    e = '#' + m((n >> 16) & 255) + m((n >> 8) & 255) + m(n & 255);
+    lightCache[hex] = e;
     return e;
   }
   function segDist(px, py, ax, ay, bx, by) {
