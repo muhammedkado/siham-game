@@ -393,7 +393,14 @@
   // الأسلوب اللامع (متل صورة الفطر والتفاحة): أسهم قصيرة مستقيمة، كل خانة بلون اللوحة مع تظليلها
   const gemParams = () => ({ inside: 1.5, minLen: 2, maxLen: 2, straight: 1, straightOnly: true, lenBias: 1, lock: true, single: true, art: true, gem: true, maxExt: 2, singleFrom: 0 });
   // الحزمة: الحيوانات أولاً ثم كل لوحات الرحلة، كلها بالأسلوب اللامع
-  function packPics() { return PICS.packPics('animals').concat(PICS.mainPics()); }
+  const PACKS = ['animals', 'sea', 'sweets'];
+  function packPics() { return PACKS.reduce((a, k) => a.concat(PICS.packPics(k)), []).concat(PICS.mainPics()); }
+  /** أقسام شاشة اللوحات: [{key, start, count}] */
+  function packGroups() {
+    const out = []; let i = 0;
+    for (const k of PACKS.concat(['classic'])) { const n = k === 'classic' ? PICS.mainPics().length : PICS.packPics(k).length; out.push({ key: k, start: i, count: n }); i += n; }
+    return out;
+  }
   // عرض اللوحة: أكبر شي لحد 18 خانة بشرط ما تزيد الخانات عن ~300 (كي ما يصير عدد الأسهم كبير كتير)
   const packWCache = {};
   const packW = pic => {
@@ -405,15 +412,15 @@
   function packBoard(i) { const pic = packPics()[i]; return Object.assign({}, buildBoard(pic, packW(pic), false, true), { fixed: null }); }
   function packSpec(i) {
     const pic = packPics()[i];
-    // تجربة: كل لوحة بستايل أسهم مختلف (11 ستايل بالدور)
-    return Object.assign({ pack: i, pic: pic.id, w: packW(pic), seed: hashStr('siham-gem-' + pic.id), tries: 3, skin: i % 11 }, gemParams());
+    // ستايل الأسهم يختاره اللاعب من المتجر (engine.packSkin)
+    return Object.assign({ pack: i, pic: pic.id, w: packW(pic), seed: hashStr('siham-gem-' + pic.id), tries: 3, skin: 0 }, gemParams());
   }
   /** خريطة خاصة من رابط هدية: الرقعة جاهزة */
   function customSpec(g) {
     return Object.assign({ custom: g.id, id: g.id, name: { ar: g.name, en: g.name }, board: g.board, seed: hashStr('siham-gift-' + g.id), tries: 3, love: true }, artParams(g.board.W));
   }
 
-  const api = { DIRS, rng, hashStr, buildBoard, fill, firstBlock, analyze, pressure, makeLevel, levelSpec, dailySpec, dailyIndex, zenSpec, difficultyOf, mainPics, packPics, packBoard, packSpec, customSpec };
+  const api = { DIRS, rng, hashStr, buildBoard, fill, firstBlock, analyze, pressure, makeLevel, levelSpec, dailySpec, dailyIndex, zenSpec, difficultyOf, mainPics, packPics, packGroups, packBoard, packSpec, customSpec };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Gen = api;
 })(typeof window !== 'undefined' ? window : globalThis);

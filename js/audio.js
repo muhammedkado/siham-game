@@ -90,10 +90,33 @@
     src.start(t, Math.random() * 0.3); src.stop(t + dur + 0.02);
   }
 
+  // ——— مؤثرات مسجّلة (Higgsfield) ———
+  const bufs = {}, loading = {};
+  function sample(name, vol, rate) {
+    if (!sfxOn || !ac() || !root.SFX_DATA || !root.SFX_DATA[name]) return;
+    const play = b => {
+      const src = ctx.createBufferSource(), g = ctx.createGain();
+      src.buffer = b; src.playbackRate.value = rate || 1; g.gain.value = vol == null ? 1 : vol;
+      src.connect(g); g.connect(sfxBus); src.start();
+    };
+    if (bufs[name]) { play(bufs[name]); return; }
+    if (loading[name]) { loading[name].push(play); return; }
+    loading[name] = [play];
+    try {
+      const bin = atob(root.SFX_DATA[name]), arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      ctx.decodeAudioData(arr.buffer, b => { bufs[name] = b; (loading[name] || []).forEach(f => f(b)); delete loading[name]; }, () => { delete loading[name]; });
+    } catch (e) { delete loading[name]; }
+  }
+
   // ===================== المؤثرات =====================
   const Sound = {
     setEnabled(v) { sfxOn = v; },
     unlock() { ac(); },
+    coin(rate) { sample('coin', 0.8, rate); },
+    coins() { sample('coins', 1.2); },
+    chest() { sample('chest', 1.3); },
+    reward() { sample('unlock', 0.75); },
 
     /** نغمة السهم رقم index من total (تبدأ من 0) */
     pop(index, total, combo) {

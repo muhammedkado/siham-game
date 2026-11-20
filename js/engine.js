@@ -354,6 +354,8 @@
       if (this.hint) { this.hint.t -= dt; if (this.hint.t <= 0 || !this.arrows[this.hint.id].alive) this.hint = null; else busy = true; }
       if (this.lens) { this.lens.t -= dt; if (this.lens.t <= 0) this.lens = null; else busy = true; }
       if (this.lensArmed || this.trace != null) busy = true;
+      // ستايلات متحركة (ذهب، حمم، قوس قزح، مجرّة، صواريخ) تحتاج رسم مستمر
+      if (!this.won && !document.hidden && (this.L.gem ? (this.packSkin != null ? this.packSkin : this.L.skin) % SKINS.length === 10 : !this.art && this.trail && TRAILS[this.trail % TRAILS.length].anim)) busy = true;
 
       // الفوز
       const exiting = this.anims.some(a => a.type === 'exit');
@@ -391,8 +393,7 @@
     _draw() {
       const ctx = this.ctx, th = this.theme;
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-      ctx.fillStyle = th.bg;
-      ctx.fillRect(0, 0, this.cw, this.ch);
+      ctx.clearRect(0, 0, this.cw, this.ch);   // شفاف: خلفية الشاشة المرسومة تبين من ورا الرقعة
       if (!this.L) return;
       const v = this.view, W = this.W, H = this.H, L = this.L;
       const sh = this.shake > 0 ? Math.sin(this.time * 70) * 6 * (this.shake / 0.3) : 0;
@@ -457,6 +458,7 @@
       // الأسهم الثابتة
       if (L.gem) this._gemArrows(animIds, pulse);
       else if (this.art) this._artArrows(v, animIds, pulse);
+      else if (this.trail) this._trailArrows(lw, animIds, pulse);
       else for (const a of this.arrows) {
         if (!a.alive || animIds.has(a.id)) continue;
         let col = th.ink, w = lw;
@@ -503,7 +505,10 @@
         }
         const col = an.type === 'bump' && this.flash.has(an.a.id) ? th.danger : (hc || th.ink);
         const sub = subPath(an.E, u, u + an.n);
-        this._arrow(sub, an.a.dir, col, lw);
+        if (this.trail) {
+          const tc = col !== th.ink ? { b: col, e: edgeOf(col), h: lightOf(col) } : this._trailCol(an.a);
+          this._tube(sub, an.a.dir, tc, lw);
+        } else this._arrow(sub, an.a.dir, col, lw);
         ctx.globalAlpha = 1;
       }
       // العدسة
@@ -643,6 +648,61 @@
       ctx.fill(); ctx.stroke();
     }
 
+    // ——— ستايلات أسهم المراحل (أنابيب ملوّنة لامعة بدل الخط الأسود) ———
+    _trailCol(a) {
+      const T = TRAILS[this.trail % TRAILS.length];
+      return T.col(a.id, this.time, a);
+    }
+    /** أنبوب: حافة أغمق + جسم + خط لمعة فاتح + رأس مثلث */
+    _tube(pts, dir, c, lw) {
+      const ctx = this.ctx, T = TRAILS[this.trail % TRAILS.length];
+      const bw = lw * 1.5, ew = lw * 2.25;
+      if (pts.length === 1) { const [dx, dy] = DIRS[dir]; pts = [[pts[0][0] - dx * 0.3, pts[0][1] - dy * 0.3], pts[0]]; }
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      if (T.glow) { ctx.save(); ctx.globalAlpha *= 0.28; ctx.strokeStyle = c.b; ctx.lineWidth = ew * 2.1; strokePoly(ctx, pts); ctx.restore(); }
+      ctx.strokeStyle = c.e; ctx.lineWidth = ew; strokePoly(ctx, pts);
+      ctx.strokeStyle = c.b; ctx.lineWidth = bw; strokePoly(ctx, pts);
+      ctx.save(); ctx.globalAlpha *= 0.8; ctx.strokeStyle = c.h; ctx.lineWidth = lw * 0.48; strokePoly(ctx, pts); ctx.restore();
+      this._artHead(pts[pts.length - 1], dir, bw * 1.18, (ew - bw) / 2, c.b, c.e);
+    }
+    _trailArrows(lw, animIds, pulse) {
+      const ctx = this.ctx, th = this.theme, ln = this.lens, T = TRAILS[this.trail % TRAILS.length];
+      const bw = lw * 1.5, ew = lw * 2.25;
+      const groups = new Map(), heads = [], special = [];
+      for (const a of this.arrows) {
+        if (!a.alive || animIds.has(a.id)) continue;
+        let col = null;
+        if (this.trace === a.id || (this.hint && this.hint.id === a.id)) col = th.accent;
+        if (this.flash.has(a.id)) col = th.danger;
+        if (ln && ln.block && ln.block.id === a.id) col = th.danger;
+        if (ln && ln.id === a.id) col = ln.block ? th.danger : th.ok;
+        if (col) { special.push([a, col]); continue; }
+        const c = this._trailCol(a), k = c.b + c.e + c.h;
+        let g = groups.get(k);
+        if (!g) { g = { c, p: new Path2D() }; groups.set(k, g); }
+        let pts = a.pts;
+        if (pts.length === 1) { const [dx, dy] = DIRS[a.dir]; pts = [[pts[0][0] - dx * 0.3, pts[0][1] - dy * 0.3], pts[0]]; }
+        g.p.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < pts.length; i++) g.p.lineTo(pts[i][0], pts[i][1]);
+        heads.push([a, c]);
+      }
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      const ga = ctx.globalAlpha;
+      if (T.glow) { ctx.globalAlpha = ga * 0.28; ctx.lineWidth = ew * 2.1; for (const g of groups.values()) { ctx.strokeStyle = g.c.b; ctx.stroke(g.p); } ctx.globalAlpha = ga; }
+      ctx.lineWidth = ew; for (const g of groups.values()) { ctx.strokeStyle = g.c.e; ctx.stroke(g.p); }
+      ctx.lineWidth = bw; for (const g of groups.values()) { ctx.strokeStyle = g.c.b; ctx.stroke(g.p); }
+      ctx.globalAlpha = ga * 0.8; ctx.lineWidth = lw * 0.48; for (const g of groups.values()) { ctx.strokeStyle = g.c.h; ctx.stroke(g.p); }
+      ctx.globalAlpha = ga;
+      for (const [a, c] of heads) this._artHead(a.pts[a.pts.length - 1], a.dir, bw * 1.18, (ew - bw) / 2, c.b, c.e);
+      for (const [a, col] of special) {
+        if (this.hint && this.hint.id === a.id) {
+          ctx.strokeStyle = th.accent; ctx.globalAlpha = 0.25 + 0.3 * pulse; ctx.lineWidth = lw * 4;
+          strokePoly(ctx, a.pts.length > 1 ? a.pts : [a.pts[0], a.pts[0]]); ctx.globalAlpha = ga;
+        }
+        this._tube(a.pts, a.dir, { b: col, e: edgeOf(col), h: lightOf(col) }, lw);
+      }
+    }
+
     // ——— رسم الأسهم الملوّنة (أنبوب بلون الرسمة + حافة أغمق) ———
     // ——— الأسلوب اللامع: أسهم مستقيمة قصيرة ممتلئة بلمعة وظل (متل حبات الحلوى) ———
     _gemArrows(animIds, pulse) {
@@ -668,7 +728,7 @@
 
     /** يرسم مجموعة أسهم لامعة دفعة وحدة (مجمّعة حسب اللون لسرعة الرسم) */
     _gemBatch(items) {
-      const sk = this.L.skin ? SKINS[this.L.skin % SKINS.length] : null;
+      const si = this.packSkin != null ? this.packSkin : this.L.skin, sk = si ? SKINS[si % SKINS.length] : null;
       if (sk && sk.draw) {
         // ستايلات تجريبية: كل سهم يترسم لحاله بإحداثيات محلية (x على طول السهم من مركز الذيل)
         const ctx = this.ctx, ga = ctx.globalAlpha, ANG = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
@@ -1019,6 +1079,22 @@
   ];
   root.ArrowSkins = SKINS.map(k => k.name);
 
+  // ——— ستايلات أسهم المراحل (تُشترى بالعملات من المتجر) ———
+  const CANDY = ['#ff4d8d', '#ffb703', '#06d6a0', '#3a86ff', '#9b5de5', '#ff7a1a', '#00b4d8', '#e63946'];
+  const hsl = (h, s, l) => 'hsl(' + Math.round(h) + ',' + s + '%,' + l + '%)';
+  const fix = c => ({ b: c, e: edgeOf(c), h: lightOf(c) });
+  const TRAILS = [
+    { name: { ar: 'حبر كلاسيك', en: 'Classic ink' }, sw: ['#1f2544'] },
+    { name: { ar: 'حلوى ملوّنة', en: 'Candy tubes' }, sw: CANDY.slice(0, 4), col: id => fix(CANDY[(id * 5) % CANDY.length]) },
+    { name: { ar: 'جليد', en: 'Ice' }, sw: ['#9bdcff', '#cdeffd', '#3a86c8'], col: id => (id % 3 ? { b: '#8fd3ff', e: '#2f78c4', h: '#ffffff' } : { b: '#bfe9ff', e: '#3a86c8', h: '#ffffff' }) },
+    { name: { ar: 'نيون', en: 'Neon' }, glow: true, sw: ['#ff2bd6', '#00e5ff', '#b3ff00'], col: id => { const c = ['#ff2bd6', '#00e5ff', '#b3ff00', '#ffd400'][id % 4]; return { b: c, e: '#1b1035', h: '#ffffff' }; } },
+    { anim: true, name: { ar: 'ذهب', en: 'Gold' }, sw: ['#f5b700', '#fff1a8', '#8a5a00'], col: (id, t) => ({ b: (Math.floor(t * 2 + id * 0.37) % 7) === 0 ? '#ffd84d' : '#f5b700', e: '#8a5a00', h: '#fff6c2' }) },
+    { anim: true, name: { ar: 'حمم بركانية 🌋', en: 'Lava' }, glow: true, sw: ['#ff5400', '#ffd166', '#7a1500'], col: (id, t) => { const k = Math.floor(t * 6 + id * 1.7) % 3; return { b: ['#ff5400', '#ff7b00', '#ff3d00'][k], e: '#7a1500', h: '#ffd166' }; } },
+    { anim: true, name: { ar: 'قوس قزح 🌈', en: 'Rainbow' }, sw: ['#ff4d4d', '#ffd400', '#2ecc71', '#3a86ff', '#9b5de5'], col: (id, t) => { const h = (Math.round(((id * 47 + t * 60) % 360) / 15) * 15); return { b: hsl(h, 90, 58), e: hsl(h, 70, 32), h: hsl(h, 100, 86) }; } },
+    { anim: true, name: { ar: 'مجرّة 🌌', en: 'Galaxy' }, glow: true, sw: ['#7b2ff7', '#f107a3', '#1a0b3d'], col: (id, t) => { const h = 260 + 50 * Math.sin(t * 1.5 + id); const hq = Math.round(h / 10) * 10; return { b: hsl(hq, 85, 55), e: '#160a33', h: '#f5e1ff' }; } },
+  ];
+  root.ArrowTrails = TRAILS.map(k => ({ name: k.name, sw: k.sw }));
+
   const lightCache = {};
   function lightOf(hex) {
     let e = lightCache[hex];
@@ -1062,6 +1138,41 @@
     ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
   }
+
+  /** معاينة ستايل أسهم في المتجر: kind = 'trail' | 'skin' */
+  root.drawArrowPreview = function (canvas, kind, idx, time) {
+    const dpr = Math.min(3, root.devicePixelRatio || 1);
+    const w = canvas.clientWidth || 120, h = canvas.clientHeight || 90;
+    if (canvas.width !== Math.round(w * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const s = Math.min(w / 4.4, h / 3.4);
+    ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * (w - 4.4 * s) / 2 + dpr * s * 0.2, dpr * (h - 3.4 * s) / 2 + dpr * s * 0.2);
+    const f = Object.create(Engine.prototype);
+    f.ctx = ctx; f.time = time || 0; f.theme = { ink: '#1f2544' };
+    if (kind === 'trail') {
+      f.trail = idx;
+      const lw = 0.2;
+      const A = [
+        { id: 0, pts: [[0.3, 2.6], [0.3, 0.9], [1.9, 0.9]], dir: 0 },
+        { id: 1, pts: [[2.4, 2.8], [2.4, 1.9], [3.6, 1.9]], dir: 0 },
+        { id: 2, pts: [[3.7, 1.3], [3.7, 0.55]], dir: 3 },
+      ];
+      for (const a of A) {
+        if (!idx) f._arrow(a.pts, a.dir, '#1f2544', lw * 0.85);
+        else f._tube(a.pts, a.dir, f._trailCol(a), lw);
+      }
+    } else {
+      f.packSkin = idx; f.L = { skin: idx };
+      const C = ['#ff5d8f', '#ffb703', '#4cc9f0', '#06d6a0', '#9b5de5'];
+      const mk = (x, y, n, dir, c) => {
+        const D = DIRS[dir], pts = [], cells = [], cols = [];
+        for (let i = 0; i < n; i++) { pts.push([x + D[0] * i, y + D[1] * i]); cells.push(i); cols.push(c); }
+        return { a: { pts, cells, cols, dir }, ox: 0, oy: 0, col: null };
+      };
+      f._gemBatch([mk(0.5, 0.5, 2, 0, C[0]), mk(3.4, 0.5, 2, 1, C[2]), mk(0.5, 1.6, 1, 3, C[1]), mk(1.7, 2.6, 2, 0, C[3]), mk(1.6, 1.6, 1, 0, C[4])]);
+    }
+  };
 
   root.Engine = Engine;
 })(window);

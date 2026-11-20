@@ -10,11 +10,16 @@
     daily: { last: null, streak: 0 },
     set: { theme: 'light', sound: true, music: true, vibe: true, lang: 'ar', safe: true },
     seen: {},
+    // اقتصاد اللعبة: عملات + ستايلات أسهم + صندوق كنز + هدية يومية
+    coins: 150, own: { trail: [0, 1], skin: [0] }, eq: { trail: 1, skin: 0 }, chest: 0, chestReady: 0,
+    login: { last: null, day: 0 },
   };
+  const fresh = () => JSON.parse(JSON.stringify(DEFAULT));
   let S;
-  try { S = Object.assign({}, DEFAULT, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { S = Object.assign({}, DEFAULT); }
+  try { S = Object.assign(fresh(), JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { S = fresh(); }
   S.set = Object.assign({}, DEFAULT.set, S.set);
   S.daily = Object.assign({}, DEFAULT.daily, S.daily);
+  S.own = Object.assign(fresh().own, S.own); S.eq = Object.assign(fresh().eq, S.eq); S.login = Object.assign(fresh().login, S.login);
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignore */ } };
 
   const t = k => (I18N[S.set.lang] || I18N.ar)[k] || I18N.ar[k] || k;
@@ -54,9 +59,10 @@
     } catch (e) { /* ignore */ }
   }
   let toastTimer = 0;
-  function toast(msg, ms) {
+  function toast(msg, ms, html) {
     const el = $('toast');
-    el.textContent = msg; el.classList.add('show');
+    if (html) el.innerHTML = msg; else el.textContent = msg;
+    el.classList.add('show');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => el.classList.remove('show'), ms || 2200);
   }
@@ -100,9 +106,12 @@
     if (id === 'gallery') renderGallery();
     if (id === 'settings') renderSettings();
     if (id === 'pack') renderPack();
+    if (id === 'shop') renderShop();
+    coinUI();
     Ads.banner(id !== 'game');
     if (id === 'game') requestAnimationFrame(() => engine.resize());
     else { Music.stop(); idleStop(); }
+    if (id === 'home') setTimeout(maybeLogin, 350);
   }
   document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => { Sound.click(); show(b.dataset.go); }));
 
@@ -131,6 +140,7 @@
     const cv = $('h-mystery');
     drawPic(cv, Gen.buildBoard(PICTURES.find(p => p.id === spec.pic), spec.w || spec.f, spec.mirror), 'silhouette');
     $('h-pack').textContent = Gen.packPics().filter(p => S.pack[p.id]).length + '/' + Gen.packPics().length;
+    renderRank(); renderChestBar();
     $('h-daily').innerHTML = S.daily.last === today() ? t('dailyDone') : (S.daily.streak > 0 && S.daily.last === yesterday() ? icon('i-fire') + ' ' + t('streak') + ' ' + S.daily.streak : t('dailyHard').replace('{n}', Gen.dailyIndex(today()) + 1));
   }
 
@@ -182,8 +192,14 @@
     const g = $('pack-grid'), pics = Gen.packPics(), gl = gifts();
     $('pack-count').textContent = pics.filter(p => S.pack[p.id]).length + '/' + pics.length;
     const stars = st => `<span class="st">${[1, 2, 3].map(i => icon('i-star', i <= st ? 'on' : '')).join('')}</span>`;
+    const GN = { animals: 'packAnimals', sea: 'packSea', sweets: 'packSweets', classic: 'packClassic' };
     g.innerHTML = gl.map(x => `<button class="pk love" data-k="g:${x.id}"><canvas></canvas><span>${esc(x.name)}</span>${stars(S.pack[x.id] || 0)}</button>`).join('')
-      + pics.map((p, i) => `<button class="pk" data-k="p:${i}"><canvas></canvas><span>${esc(p.name[S.set.lang])}</span>${stars(S.pack[p.id] || 0)}</button>`).join('');
+      + Gen.packGroups().map(gr => {
+        const done = pics.slice(gr.start, gr.start + gr.count).filter(p => S.pack[p.id]).length;
+        const isNew = gr.key === 'sea' || gr.key === 'sweets';
+        return `<h4 class="pk-head">${t(GN[gr.key])}${isNew ? `<i class="new">${t('newBadge')}</i>` : ''}<small>${done}/${gr.count}</small></h4>`
+          + pics.slice(gr.start, gr.start + gr.count).map((p, j) => `<button class="pk" data-k="p:${gr.start + j}"><canvas></canvas><span>${esc(p.name[S.set.lang])}</span>${stars(S.pack[p.id] || 0)}</button>`).join('');
+      }).join('');
     g.querySelectorAll('.pk').forEach(b => b.addEventListener('click', () => {
       Sound.unlock(); Sound.click();
       const k = b.dataset.k;
@@ -232,7 +248,7 @@
   $('set-safe').addEventListener('change', e => { S.set.safe = e.target.checked; save(); engine.safeTap = S.set.safe; });
   $('set-reset').addEventListener('click', () => {
     modal(`<h3>⚠️</h3><p>${t('resetConfirm')}</p><div class="m-actions"><button class="btn" data-a="yes" style="color:var(--danger)">${t('yes')}</button><button class="btn primary" data-a="no">${t('no')}</button></div>`, {
-      yes: () => { const set = S.set, gf = S.gifts; S = JSON.parse(JSON.stringify(DEFAULT)); S.set = set; S.gifts = gf; save(); closeModal(); show('home'); },
+      yes: () => { const set = S.set, gf = S.gifts; S = fresh(); S.set = set; S.gifts = gf; save(); applyStyle(); closeModal(); show('home'); },
       no: closeModal,
     });
   });
@@ -297,8 +313,7 @@
     G.mode = 'pack'; G.n = 0; G.pk = i;
     const lv = Gen.makeLevel(Gen.packSpec(i));
     launch(lv, 3);
-    const sk = (window.ArrowSkins || [])[lv.skin];
-    $('g-title').textContent = pic.name[S.set.lang] + (sk ? ' · ' + sk[S.set.lang] : '');
+    $('g-title').textContent = pic.name[S.set.lang];
   }
   function startGift(id) {
     const g = gifts().find(x => x.id === id);
@@ -320,7 +335,8 @@
   }
   function launch(level, hearts, zen) {
     G.level = level; G.usedChance = false; G.combo = 0;
-    G.streak = 0; G.best = 0; G.miss = 0; G.nudge = 0; G.calmShown = false; G.adHearts = 0;
+    G.streak = 0; G.best = 0; G.miss = 0; G.nudge = 0; G.calmShown = false; G.adHearts = 0; G.bonus = 0;
+    applyStyle();
     hideCoach(); hideNudge(true); closeModal(); setLensUI(false); clearFx();
     show('game');
     engine.load(level, { hearts, zen });
@@ -419,6 +435,7 @@
       const k = Math.min(5, tier), words = t('combo');
       floater(`<b>${words[Math.min(words.length - 1, tier)]}</b><small>${n} ${t('inRow')}</small>`, 't' + k);
       Sound.combo(Math.min(6, tier));
+      if (!engine.zen) { G.bonus += 2 * (tier + 1); setTimeout(() => Sound.coin(1 + tier * 0.06), 260); }
       engine.celebrate(tier);
       glow(TCOL[k]);
       vibrate([12, 40, 18]);
@@ -564,10 +581,17 @@
     const stars = G.mode === 'zen' ? 3 : G.usedChance ? 1 : Math.max(1, 3 - engine.mistakes);
     if (G.mode !== 'pack' && G.mode !== 'gift') S.pics[G.level.pic] = 1;
     const packId = G.mode === 'pack' ? Gen.packPics()[G.pk].id : G.mode === 'gift' ? G.gift.id : null;
+    G.packFirst = !!packId && !S.pack[packId];
     if (packId) S.pack[packId] = Math.max(S.pack[packId] || 0, stars);
-    const rewards = [];
+    const rewards = [], earn = [];
     if (G.mode === 'journey') {
       S.stars[G.n] = Math.max(S.stars[G.n] || 0, stars);
+      if (G.n === S.level) {
+        earn.push([t('cFirst'), 15], [t('cStars'), stars * 5]);
+        if (engine.mistakes === 0) earn.push([t('cPerfect'), 10]);
+        S.chest = (S.chest || 0) + 1;
+        if (S.chest >= CHEST_EVERY) { S.chest = 0; S.chestReady = (S.chestReady || 0) + 1; }
+      } else earn.push([t('cReplay'), 4 + stars * 2]);
       if (G.n === S.level) {
         S.level = G.n + 1;
         if (G.n % 3 === 0) { S.hints++; rewards.push('+1 💡'); }
@@ -577,7 +601,13 @@
       S.daily.streak = S.daily.last === yesterday() ? S.daily.streak + 1 : 1;
       S.daily.last = today();
       S.hints++; S.lenses++; rewards.push('+1 💡', '+1 🔍', '🔥 ' + S.daily.streak);
-    }
+      earn.push([t('cDaily'), 100 + 10 * Math.min(10, S.daily.streak)]);
+    } else if (G.mode === 'pack' || G.mode === 'gift') {
+      earn.push(G.packFirst ? [t('cFirst'), 25] : [t('cReplay'), 8], [t('cStars'), stars * (G.packFirst ? 5 : 1)]);
+    } else if (G.mode === 'zen') earn.push([t('cFirst'), 10]);
+    if (G.bonus) earn.push([t('cStreak'), G.bonus]);
+    const coinsWon = earn.reduce((a, e) => a + e[1], 0);
+    S.coins += coinsWon;
     save(); updateTools();
     const name = esc(G.level.picName[S.set.lang]);
     const love = G.mode === 'gift';
@@ -593,9 +623,11 @@
       ${G.mode === 'zen' ? '' : `<div class="m-stars">${[1, 2, 3].map(i => icon('i-star', i <= stars ? 'on' : '')).join('')}</div>`}
       ${flawless}
       ${bestLine}
+      ${coinsWon ? `<div class="m-coins"><div class="mc-rows">${earn.filter(e => e[1]).map(e => `<span>${esc(e[0])}<b>+${e[1]}</b></span>`).join('')}</div><div class="mc-total">${icon('i-coin')}<b id="m-coin-n">+0</b></div></div>` : ''}
       ${rewards.length ? `<div class="m-reward">${t('reward')}: ${rewards.join(' ')}</div>` : ''}
-      <div class="m-actions">${nextBtn}${bonusBtn}${homeBtn}</div>`,
+      <div class="m-actions">${S.chestReady ? `<button class="btn chest-btn" data-a="chest">${icon('i-chest')} ${t('openChest')}</button>` : ''}${nextBtn}${bonusBtn}${homeBtn}</div>`,
     {
+      chest: () => openChest(),
       next: () => { G.mode === 'pack' ? startPack(G.pk + 1) : startLevel(G.n + 1); Ads.afterWin(); },
       zen: () => { startZen(); Ads.afterWin(); },
       home: () => { closeModal(); show('home'); Ads.afterWin(); },
@@ -607,6 +639,8 @@
       }),
     });
     document.querySelectorAll('.m-stars .ico.on').forEach((el, i) => { el.style.animationDelay = (0.15 + i * 0.18) + 's'; });
+    if (coinsWon) countUp($('m-coin-n'), coinsWon, 700);
+    coinUI();
     requestAnimationFrame(() => drawPic($('m-pic'), G.level, 'full'));
   }
 
@@ -637,10 +671,172 @@
     return true;
   };
 
-  // للاختبار
-  window.__siham = { engine, G, S, startLevel, startDaily, startZen, idleNudge, startPack, startGift, decodeGift };
+  // ——— الاقتصاد: عملات، متجر، صندوق كنز، هدية يومية ———
+  const TRAIL_PRICE = [0, 0, 150, 250, 400, 550, 700, 900];
+  const SKIN_PRICE = [0, 120, 150, 180, 220, 260, 300, 350, 400, 450, 600];
+  const CHEST_EVERY = 4;
+  const RANKS = [0, 15, 40, 90, 160, 260];
+  const LOGIN = [{ c: 30 }, { h: 1 }, { c: 50 }, { l: 1 }, { c: 80 }, { h: 2, l: 1 }, { chest: 1 }];
+  const priceOf = (kind, i) => (kind === 'trail' ? TRAIL_PRICE : SKIN_PRICE)[i] || 0;
+  const styleName = (kind, i) => ((kind === 'trail' ? window.ArrowTrails : window.ArrowSkins)[i] || {}).name || ((window.ArrowSkins || [])[i]) || {};
 
-  applyI18n(); applyTheme(); show('home');
+  function applyStyle() { engine.trail = S.eq.trail || 0; engine.packSkin = S.eq.skin || 0; engine.kick(); }
+  function coinUI() {
+    ['h-coins', 's-coins'].forEach(id => { const el = $(id); if (el) el.textContent = S.coins; });
+    // نقطة على زر المتجر إذا في شي بتقدر تشتريه
+    let can = false;
+    ['trail', 'skin'].forEach(k => (k === 'trail' ? TRAIL_PRICE : SKIN_PRICE).forEach((p, i) => { if (p && p <= S.coins && !S.own[k].includes(i)) can = true; }));
+    const d = $('shop-dot'); if (d) d.classList.toggle('hidden', !can);
+  }
+  function countUp(el, n, ms) {
+    if (!el) return;
+    const t0 = performance.now();
+    Sound.coin(1.1);
+    let ticks = 0;
+    const step = now => {
+      const p = Math.min(1, (now - t0) / ms), v = Math.round(n * (1 - Math.pow(1 - p, 3)));
+      el.textContent = '+' + v;
+      if (Math.floor(p * 6) > ticks) { ticks = Math.floor(p * 6); if (ticks < 6) Sound.coin(1 + ticks * 0.07); }
+      if (p < 1) requestAnimationFrame(step); else { el.parentElement.classList.add('done'); Sound.coins(); }
+    };
+    requestAnimationFrame(step);
+  }
+  function renderRank() {
+    const st = totalStars(); let r = 0;
+    while (r + 1 < RANKS.length && st >= RANKS[r + 1]) r++;
+    const next = RANKS[r + 1];
+    $('h-rank').innerHTML = `<b>${esc(t('rank')[r])}</b>` + (next ? `<span class="rk-track"><span style="width:${Math.round(100 * (st - RANKS[r]) / (next - RANKS[r]))}%"></span></span><small>${st}/${next} ★</small>` : '');
+  }
+  function renderChestBar() {
+    const ready = S.chestReady > 0, n = S.chest || 0;
+    $('h-chest').classList.toggle('ready', ready);
+    $('h-chest-fill').style.width = (ready ? 100 : Math.round(100 * n / CHEST_EVERY)) + '%';
+    $('h-chest-txt').textContent = ready ? t('chestReady') : t('chestIn').replace('{n}', CHEST_EVERY - n);
+  }
+  $('h-chest').addEventListener('click', () => { Sound.unlock(); if (S.chestReady > 0) openChest(); else { Sound.click(); toast(t('chestIn').replace('{n}', CHEST_EVERY - (S.chest || 0))); } });
+
+  /** يعطي جوائز ويرجع سطور العرض */
+  function grant(r) {
+    const out = [];
+    if (r.c) { S.coins += r.c; out.push(`${icon('i-coin')} +${r.c}`); }
+    if (r.h) { S.hints += r.h; out.push(`💡 +${r.h}`); }
+    if (r.l) { S.lenses += r.l; out.push(`🔍 +${r.l}`); }
+    if (r.style) { S.own[r.style.kind].push(r.style.i); out.push(`✨ ${esc(styleName(r.style.kind, r.style.i)[S.set.lang] || '')}`); }
+    save(); updateTools(); coinUI();
+    return out;
+  }
+  function rollChest(big) {
+    const r = { c: (big ? 120 : 60) + Math.floor(Math.random() * 9) * 10 };
+    if (Math.random() < 0.55) r.h = 1 + (Math.random() < 0.35 ? 1 : 0);
+    if (Math.random() < 0.4) r.l = 1 + (Math.random() < 0.3 ? 1 : 0);
+    // فرصة ستايل أسهم جديد (من الرخيصين والمتوسطين)
+    if (Math.random() < (big ? 0.6 : 0.3)) {
+      const pool = [];
+      TRAIL_PRICE.forEach((p, i) => { if (p && p <= 400 && !S.own.trail.includes(i)) pool.push({ kind: 'trail', i }); });
+      SKIN_PRICE.forEach((p, i) => { if (p && p <= 300 && !S.own.skin.includes(i)) pool.push({ kind: 'skin', i }); });
+      if (pool.length) r.style = pool[(Math.random() * pool.length) | 0];
+    }
+    return r;
+  }
+  function openChest(big, after) {
+    if (!big) { if (!(S.chestReady > 0)) return; S.chestReady--; save(); }
+    const r = rollChest(big);
+    modal(`<h3>${t('chest')}</h3><div class="chest-big" id="chest-big"><svg class="ico"><use href="#i-chest"/></svg><i class="rays"></i></div><p class="chest-tap">👆</p><div class="chest-loot hidden" id="chest-loot"></div>
+      <div class="m-actions"><button class="btn primary hidden" data-a="ok">${t('collect')}</button></div>`, {
+      ok: () => { closeModal(); if (current === 'home') renderHome(); if (after) after(); if (r.style) offerTry(r.style); },
+    }, { locked: true });
+    Sound.unlock();
+    const box = $('chest-big');
+    let opened = false;
+    const open = () => {
+      if (opened) return; opened = true;
+      box.classList.add('open'); Sound.chest(); vibrate([20, 40, 30, 40, 80]);
+      setTimeout(() => {
+        const lines = grant(r);
+        const loot = $('chest-loot'); loot.innerHTML = `<small>${t('chestGot')}</small>` + lines.map((l, i) => `<span style="animation-delay:${i * 0.15}s">${l}</span>`).join('');
+        loot.classList.remove('hidden');
+        document.querySelector('#modal [data-a=ok]').classList.remove('hidden');
+        document.querySelector('#modal .chest-tap').classList.add('hidden');
+        Sound.reward();
+      }, 650);
+    };
+    box.addEventListener('click', open);
+    setTimeout(open, 1600);
+  }
+  function offerTry(st) {
+    modal(`<h3>✨</h3><h3 style="font-size:22px">${t('newStyle')}</h3><canvas class="m-prev" id="m-prev"></canvas><p><b>${esc(styleName(st.kind, st.i)[S.set.lang] || '')}</b></p>
+      <div class="m-actions"><button class="btn primary" data-a="use">${t('tryStyle')}</button><button class="btn" data-a="no">${t('later')}</button></div>`,
+    { use: () => { S.eq[st.kind] = st.i; save(); applyStyle(); closeModal(); toast(t('equipped')); }, no: closeModal });
+    requestAnimationFrame(() => drawArrowPreview($('m-prev'), st.kind, st.i, 0));
+  }
+
+  // هدية الدخول اليومية (7 أيام وبعدين ترجع)
+  function maybeLogin() {
+    if (current !== 'home' || modalOpen || S.level < 2 || S.login.last === today()) return;
+    const idx = (S.login.last === yesterday() ? S.login.day : 0) % LOGIN.length;
+    const lbl = r => r.chest ? icon('i-chest') : r.c ? `${icon('i-coin')}<b>${r.c}</b>` : `${r.h ? '💡' + r.h : ''}${r.l ? ' 🔍' + r.l : ''}`;
+    modal(`<h3>🎁 ${t('loginTitle')}</h3><p>${t('loginSub')}</p><div class="login-grid">${LOGIN.map((r, i) => `<div class="ld ${i < idx ? 'got' : i === idx ? 'today' : ''} ${r.chest ? 'big' : ''}"><small>${t('loginDay').replace('{n}', i + 1)}</small><span>${lbl(r)}</span></div>`).join('')}</div>
+      <div class="m-actions"><button class="btn primary" data-a="claim">${t('claim')}</button></div>`, {
+      claim: () => {
+        S.login = { last: today(), day: idx + 1 };
+        const r = LOGIN[idx];
+        if (r.chest) { save(); openChest(true); return; }
+        const lines = grant(r);
+        closeModal(); Sound.reward(); toast(lines.join(' &nbsp; '), 2600, true); renderHome();
+      },
+    }, { locked: true });
+  }
+
+  // ——— المتجر ———
+  let shopTab = 'trail', shopRaf = 0;
+  document.querySelectorAll('#shop-tabs button').forEach(b => b.addEventListener('click', () => { Sound.click(); shopTab = b.dataset.v; renderShop(); }));
+  function renderShop() {
+    document.querySelectorAll('#shop-tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === shopTab));
+    const g = $('shop-grid');
+    if (shopTab === 'tools') {
+      const tools = [{ k: 'h', n: 3, p: 90, ic: '💡', lbl: t('buyHints'), have: S.hints }, { k: 'l', n: 3, p: 90, ic: '🔍', lbl: t('buyLenses'), have: S.lenses }];
+      g.innerHTML = tools.map((x, i) => `<div class="sh-card tool-card"><div class="sh-ic">${x.ic}<i>${x.have}</i></div><b>${x.lbl}</b><button class="sh-btn buy" data-tool="${i}">${icon('i-coin')} ${x.p}</button></div>`).join('')
+        + (Ads.ready() ? `<div class="sh-card tool-card"><div class="sh-ic">🎬</div><b>+50 ${t('coins')}</b><button class="sh-btn buy" data-adcoins="1">${t('watchAd')}</button></div>` : '');
+      g.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => {
+        const x = tools[+b.dataset.tool];
+        if (S.coins < x.p) { Sound.bump(); toast(t('notEnough').replace('{n}', x.p - S.coins)); return; }
+        S.coins -= x.p; if (x.k === 'h') S.hints += x.n; else S.lenses += x.n;
+        save(); updateTools(); Sound.reward(); toast(x.ic + ' +' + x.n); renderShop(); coinUI();
+      }));
+      g.querySelectorAll('[data-adcoins]').forEach(b => b.addEventListener('click', () => Ads.reward('coins', () => { S.coins += 50; save(); coinUI(); Sound.coins(); renderShop(); })));
+      cancelAnimationFrame(shopRaf);
+      return;
+    }
+    const kind = shopTab, list = kind === 'trail' ? window.ArrowTrails : window.ArrowSkins.map(n => ({ name: n }));
+    g.innerHTML = list.map((it, i) => {
+      const own = S.own[kind].includes(i), on = S.eq[kind] === i, p = priceOf(kind, i);
+      const btn = on ? `<button class="sh-btn on" disabled>${t('equipped')}</button>` : own ? `<button class="sh-btn" data-eq="${i}">${t('equip')}</button>` : `<button class="sh-btn buy ${p > S.coins ? 'poor' : ''}" data-buy="${i}">${icon('i-coin')} ${p}</button>`;
+      return `<div class="sh-card ${on ? 'on' : ''} ${own ? '' : 'locked'}"><canvas data-i="${i}"></canvas><b>${esc(it.name[S.set.lang])}</b>${btn}</div>`;
+    }).join('');
+    g.querySelectorAll('[data-eq]').forEach(b => b.addEventListener('click', () => { Sound.click(); S.eq[kind] = +b.dataset.eq; save(); applyStyle(); renderShop(); }));
+    g.querySelectorAll('[data-buy]').forEach(b => b.addEventListener('click', () => {
+      const i = +b.dataset.buy, p = priceOf(kind, i);
+      if (S.coins < p) { Sound.bump(); vibrate(30); b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake'); toast(t('notEnough').replace('{n}', p - S.coins)); return; }
+      S.coins -= p; S.own[kind].push(i); S.eq[kind] = i; save(); applyStyle();
+      Sound.reward(); vibrate([15, 30, 15]); toast(t('bought'));
+      renderShop(); coinUI();
+      const card = g.querySelector(`canvas[data-i="${i}"]`); if (card) card.parentElement.classList.add('pop');
+    }));
+    const cvs = [...g.querySelectorAll('canvas')];
+    cancelAnimationFrame(shopRaf);
+    const t0 = performance.now();
+    const loop = now => {
+      if (current !== 'shop' || shopTab !== kind) return;
+      for (const c of cvs) drawArrowPreview(c, kind, +c.dataset.i, (now - t0) / 1000);
+      shopRaf = requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(() => { for (const c of cvs) drawArrowPreview(c, kind, +c.dataset.i, 0); shopRaf = requestAnimationFrame(loop); });
+  }
+
+  // للاختبار
+  window.__siham = { engine, G, S: () => S, startLevel, startDaily, startZen, idleNudge, startPack, startGift, decodeGift, openChest, maybeLogin, show };
+
+  applyI18n(); applyTheme(); applyStyle(); show('home');
   checkGift();
   window.addEventListener('hashchange', checkGift);
 })();
