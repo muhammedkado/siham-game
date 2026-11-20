@@ -668,6 +668,22 @@
 
     /** يرسم مجموعة أسهم لامعة دفعة وحدة (مجمّعة حسب اللون لسرعة الرسم) */
     _gemBatch(items) {
+      const sk = this.L.skin ? SKINS[this.L.skin % SKINS.length] : null;
+      if (sk && sk.draw) {
+        // ستايلات تجريبية: كل سهم يترسم لحاله بإحداثيات محلية (x على طول السهم من مركز الذيل)
+        const ctx = this.ctx, ga = ctx.globalAlpha, ANG = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
+        for (const it of items) {
+          const a = it.a, n = a.cells.length, c = it.col || a.cols[n - 1];
+          ctx.save();
+          ctx.translate(a.pts[0][0] + it.ox, a.pts[0][1] + it.oy);
+          ctx.rotate(ANG[a.dir]);
+          ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+          sk.draw(ctx, n, c, edgeOf(c), lightOf(c), this.time);
+          ctx.restore();
+          ctx.globalAlpha = ga;
+        }
+        return;
+      }
       const ctx = this.ctx, shadow = new Path2D(), gloss = new Path2D(), by = new Map();
       const grp = c => { let g = by.get(c); if (!g) { g = { body: new Path2D(), depth: new Path2D(), hi: new Path2D() }; by.set(c, g); } return g; };
       for (const it of items) {
@@ -919,6 +935,90 @@
     edgeCache[hex] = e;
     return e;
   }
+  // ——— ستايلات الأسهم (تجريبية: كل لوحة بالحزمة بستايل مختلف) ———
+  // كل رسمة بإحداثيات محلية: الذيل عند 0، الرأس عند n-1، والسهم يأشّر لـ +x
+  const pth = (g, pts) => { g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]); g.closePath(); };
+  const line = (g, x0, y0, x1, y1) => { g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); };
+  const fillStroke = (g, f, e, w) => { g.fillStyle = f; g.fill(); if (e) { g.strokeStyle = e; g.lineWidth = w; g.stroke(); } };
+  const basic = (g, n, t, hw) => { const s0 = -0.42, tip = n - 1 + 0.45, hb = tip - 0.46;
+    pth(g, [[s0, -t], [hb, -t], [hb, -hw], [tip, 0], [hb, hw], [hb, t], [s0, t]]); };
+  const SKINS = [
+    { name: { ar: 'حلوى لامعة', en: 'Glossy candy' } },
+    { name: { ar: 'سهم رماية 🏹', en: 'Archery' }, draw(g, n, c, e, lt) {
+      const s0 = -0.44, tip = n - 1 + 0.47;
+      g.strokeStyle = e; g.lineWidth = 0.17; line(g, s0 + 0.12, 0, tip - 0.3, 0);
+      g.strokeStyle = c; g.lineWidth = 0.1; line(g, s0 + 0.12, 0, tip - 0.3, 0);
+      for (const k of [-1, 1]) { pth(g, [[s0, 0], [s0 + 0.06, 0.32 * k], [s0 + 0.32, 0.3 * k], [s0 + 0.3, 0]]); fillStroke(g, lt, e, 0.045); }
+      pth(g, [[tip, 0], [tip - 0.4, -0.27], [tip - 0.3, 0], [tip - 0.4, 0.27]]); fillStroke(g, c, e, 0.05);
+      g.strokeStyle = 'rgba(255,255,255,.7)'; g.lineWidth = 0.035; line(g, tip - 0.08, -0.03, tip - 0.3, -0.17);
+    } },
+    { name: { ar: 'شيفرون ›››', en: 'Chevrons' }, draw(g, n, c, e) {
+      const s0 = -0.3, tip = n - 1 + 0.38, k = n === 1 ? 2 : n * 2, step = (tip - s0) / k;
+      for (let i = 0; i < k; i++) { const x = s0 + (i + 1) * step, h = i === k - 1 ? 0.36 : 0.28;
+        for (const [col, w] of [[e, 0.24], [c, 0.15]]) { g.strokeStyle = col; g.lineWidth = w; g.beginPath(); g.moveTo(x - h * 0.75, -h); g.lineTo(x, 0); g.lineTo(x - h * 0.75, h); g.stroke(); } }
+    } },
+    { name: { ar: 'كيوت 👀', en: 'Cuties' }, draw(g, n, c, e) {
+      const s0 = -0.42, tip = n - 1 + 0.46, r = 0.36;
+      g.beginPath(); g.arc(s0 + r, 0, r, Math.PI / 2, Math.PI * 1.5); g.lineTo(tip - 0.32, -r); g.lineTo(tip, 0); g.lineTo(tip - 0.32, r); g.closePath();
+      fillStroke(g, c, e, 0.06);
+      g.fillStyle = 'rgba(255,255,255,.45)'; g.beginPath(); g.ellipse(s0 + 0.3, -0.17, 0.1, 0.05, -0.5, 0, 7); g.fill();
+      const ex = tip - 0.5;
+      for (const y of [-0.14, 0.14]) { g.fillStyle = '#fff'; g.beginPath(); g.arc(ex, y, 0.1, 0, 7); g.fill(); g.fillStyle = '#1d1b2e'; g.beginPath(); g.arc(ex + 0.035, y, 0.055, 0, 7); g.fill(); }
+    } },
+    { name: { ar: 'نيون ✨', en: 'Neon' }, draw(g, n, c, e, lt) {
+      basic(g, n, 0.15, 0.38);
+      g.strokeStyle = c; g.globalAlpha *= 0.25; g.lineWidth = 0.26; g.stroke(); g.globalAlpha /= 0.25;
+      g.fillStyle = 'rgba(20,16,40,.82)'; g.fill();
+      g.strokeStyle = c; g.lineWidth = 0.09; g.stroke();
+      g.strokeStyle = lt; g.lineWidth = 0.03; g.stroke();
+    } },
+    { name: { ar: 'ستيكر', en: 'Sticker' }, draw(g, n, c, e) {
+      g.save(); g.translate(0.04, 0.07); basic(g, n, 0.2, 0.42); g.fillStyle = g.strokeStyle = 'rgba(30,20,50,.22)'; g.lineWidth = 0.2; g.fill(); g.stroke(); g.restore();
+      basic(g, n, 0.2, 0.42); g.strokeStyle = '#fff'; g.lineWidth = 0.18; g.stroke(); g.fillStyle = c; g.fill();
+    } },
+    { name: { ar: 'بكسل 8-بت 👾', en: '8-bit' }, draw(g, n, c, e, lt) {
+      const u = 0.16, s0 = -0.4, tip = n - 1 + 0.48, hb = tip - 3 * u;
+      const rects = [[s0, -u, hb - s0, 2 * u]];
+      for (let j = 0; j < 3; j++) rects.push([hb + j * u, -(3 - j) * u, u, 2 * (3 - j) * u]);
+      g.fillStyle = e; for (const [x, y, w, h] of rects) g.fillRect(x, y + 0.06, w, h);
+      g.fillStyle = c; for (const [x, y, w, h] of rects) g.fillRect(x, y, w, h);
+      g.fillStyle = lt; for (const [x, y, w] of rects) g.fillRect(x, y, w, 0.05);
+    } },
+    { name: { ar: 'طيارة ورق ✈️', en: 'Paper plane' }, draw(g, n, c, e, lt) {
+      const s0 = -0.44, tip = n - 1 + 0.47;
+      pth(g, [[tip, 0], [s0, -0.38], [s0 + 0.22, 0], [s0, 0.38]]); fillStroke(g, c, e, 0.05);
+      pth(g, [[tip, 0], [s0, -0.38], [s0 + 0.22, 0]]); g.fillStyle = lt; g.fill();
+      g.strokeStyle = e; g.lineWidth = 0.035; line(g, s0 + 0.22, 0, tip - 0.04, 0);
+    } },
+    { name: { ar: 'عصا سكاكر 🍬', en: 'Candy cane' }, draw(g, n, c, e) {
+      basic(g, n, 0.22, 0.44); g.fillStyle = c; g.fill();
+      g.save(); g.clip(); g.strokeStyle = 'rgba(255,255,255,.6)'; g.lineWidth = 0.1;
+      for (let x = -1; x < n + 0.6; x += 0.3) line(g, x, 0.5, x + 0.45, -0.5);
+      g.restore(); basic(g, n, 0.22, 0.44); g.strokeStyle = e; g.lineWidth = 0.055; g.stroke();
+    } },
+    { name: { ar: 'أزرار 🔘', en: 'Buttons' }, draw(g, n, c, e, lt) {
+      if (n > 1) { g.strokeStyle = e; g.lineWidth = 0.32; line(g, 0, 0, n - 1, 0); }
+      for (let i = 0; i < n; i++) {
+        g.beginPath(); g.arc(i, 0.05, 0.41, 0, 7); g.fillStyle = e; g.fill();
+        g.beginPath(); g.arc(i, 0, 0.41, 0, 7); g.fillStyle = c; g.fill();
+        g.beginPath(); g.arc(i - 0.1, -0.13, 0.13, 0, 7); g.fillStyle = 'rgba(255,255,255,.35)'; g.fill();
+      }
+      const h = n - 1; pth(g, [[h + 0.24, 0], [h - 0.13, -0.22], [h - 0.13, 0.22]]); g.fillStyle = '#fff'; g.fill();
+      for (let i = 0; i < n - 1; i++) { g.beginPath(); g.arc(i, 0, 0.08, 0, 7); g.fillStyle = 'rgba(255,255,255,.85)'; g.fill(); }
+    } },
+    { name: { ar: 'صواريخ 🚀', en: 'Rockets' }, draw(g, n, c, e, lt, time) {
+      const s0 = -0.3, tip = n - 1 + 0.47, r = 0.25;
+      const fl = 0.16 + 0.05 * Math.sin(time * 18 + n);
+      pth(g, [[s0 + 0.04, -0.12], [s0 - fl, 0], [s0 + 0.04, 0.12]]); g.fillStyle = '#ffb703'; g.fill();
+      pth(g, [[s0 + 0.04, -0.06], [s0 - fl * 0.55, 0], [s0 + 0.04, 0.06]]); g.fillStyle = '#fff3b0'; g.fill();
+      for (const k of [-1, 1]) { pth(g, [[s0, 0.12 * k], [s0 - 0.04, 0.4 * k], [s0 + 0.3, 0.2 * k]]); fillStroke(g, e, null); }
+      g.beginPath(); g.moveTo(s0, -r); g.lineTo(tip - 0.36, -r); g.quadraticCurveTo(tip - 0.05, -r * 0.6, tip, 0); g.quadraticCurveTo(tip - 0.05, r * 0.6, tip - 0.36, r); g.lineTo(s0, r); g.closePath();
+      fillStroke(g, c, e, 0.05);
+      g.beginPath(); g.arc(tip - 0.48, 0, 0.1, 0, 7); fillStroke(g, '#bde0fe', e, 0.04);
+    } },
+  ];
+  root.ArrowSkins = SKINS.map(k => k.name);
+
   const lightCache = {};
   function lightOf(hex) {
     let e = lightCache[hex];

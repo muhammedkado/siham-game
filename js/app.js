@@ -295,8 +295,10 @@
     const pic = Gen.packPics()[i];
     if (!pic) { show('pack'); return; }
     G.mode = 'pack'; G.n = 0; G.pk = i;
-    launch(Gen.makeLevel(Gen.packSpec(i)), 3);
-    $('g-title').textContent = pic.name[S.set.lang];
+    const lv = Gen.makeLevel(Gen.packSpec(i));
+    launch(lv, 3);
+    const sk = (window.ArrowSkins || [])[lv.skin];
+    $('g-title').textContent = pic.name[S.set.lang] + (sk ? ' · ' + sk[S.set.lang] : '');
   }
   function startGift(id) {
     const g = gifts().find(x => x.id === id);

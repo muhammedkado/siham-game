@@ -322,7 +322,7 @@
     }
     return {
       W: board.W, H: board.H, mask: board.mask, color: board.color, fixed: board.fixed,
-      arrows: best.arrows, pic: pic ? pic.id : spec.id, picName: pic ? pic.name : spec.name, art: !!spec.art, gem: !!spec.gem,
+      arrows: best.arrows, pic: pic ? pic.id : spec.id, picName: pic ? pic.name : spec.name, art: !!spec.art, gem: !!spec.gem, skin: spec.skin || 0,
       fillRatio: best.fillRatio, layers: best.an.layers, spec,
     };
   }
@@ -405,7 +405,8 @@
   function packBoard(i) { const pic = packPics()[i]; return Object.assign({}, buildBoard(pic, packW(pic), false, true), { fixed: null }); }
   function packSpec(i) {
     const pic = packPics()[i];
-    return Object.assign({ pack: i, pic: pic.id, w: packW(pic), seed: hashStr('siham-gem-' + pic.id), tries: 3 }, gemParams());
+    // تجربة: كل لوحة بستايل أسهم مختلف (11 ستايل بالدور)
+    return Object.assign({ pack: i, pic: pic.id, w: packW(pic), seed: hashStr('siham-gem-' + pic.id), tries: 3, skin: i % 11 }, gemParams());
   }
   /** خريطة خاصة من رابط هدية: الرقعة جاهزة */
   function customSpec(g) {
