@@ -13,6 +13,8 @@
     // اقتصاد اللعبة: عملات + ستايلات أسهم + صندوق كنز + هدية يومية
     coins: 150, own: { trail: [0, 1], skin: [0] }, eq: { trail: 1, skin: 0 }, chest: 0, chestReady: 0,
     login: { last: null, day: 0 },
+    // إحصائيات: أفضل نتيجة لكل مرحلة + عدد مراحل اليوم
+    rec: {}, today: { d: null, n: 0 }, wins: 0,
   };
   const fresh = () => JSON.parse(JSON.stringify(DEFAULT));
   let S;
@@ -305,7 +307,7 @@
       G.combo = 0;
       if (G.streak >= 3) { const sb = $('g-streak'); sb.classList.remove('bump'); sb.classList.add('broke'); }
       G.streak = 0; engine.setHot(0);
-      G.miss++;
+      G.miss++; G.misses++;
       updateHud(true);
       if (G.mode === 'journey' && G.n === 1 && !S.seen.coach2) { S.seen.coach2 = 1; save(); coach(t('coach2')); }
       else if (G.miss >= 2 && !G.calmShown && (engine.zen || hearts > 0)) {
@@ -319,6 +321,13 @@
     onTrace() { vibrate(15); hideCoach(); },
   });
   engine.safeTap = S.set.safe;
+
+  // الوقت لا يُحسب والتطبيق في الخلفية
+  document.addEventListener('visibilitychange', () => {
+    if (!G.t0) return;
+    if (document.hidden) G.hidAt = Date.now();
+    else if (G.hidAt) { G.t0 += Date.now() - G.hidAt; G.hidAt = 0; }
+  });
 
   function startLevel(n) {
     G.mode = 'journey'; G.n = n;
@@ -356,6 +365,7 @@
   function launch(level, hearts, zen) {
     G.level = level; G.usedChance = false; G.combo = 0;
     G.streak = 0; G.best = 0; G.miss = 0; G.nudge = 0; G.calmShown = false; G.adHearts = 0; G.bonus = 0;
+    G.t0 = Date.now(); G.hidAt = 0; G.hintsUsed = 0; G.misses = 0;
     applyStyle();
     hideCoach(); hideNudge(true); closeModal(); setLensUI(false); clearFx();
     show('game');
@@ -377,6 +387,7 @@
     const cells = level.mask.reduce((a, b) => a + b, 0);
     const diff = Gen.difficultyOf(level.art ? level.arrows.length * 3.5 : cells);
     $('g-diff').textContent = zen ? '🍃' : t(diff);
+    G.diff = zen ? null : diff;
     // موسيقى هادئة أو حماسية حسب المرحلة
     G.style = zen || G.mode === 'pack' || G.mode === 'gift' ? 'calm'
       : G.mode === 'daily' ? 'hype'
@@ -583,7 +594,7 @@
     if (engine.over || engine.won) return;
     if (G.mode !== 'zen' && S.hints <= 0) { if (Ads.ready()) offerAd('hint'); else toast(t('noHints')); return; }
     if (!engine.useHint()) { toast(t('noFree')); return; }
-    Sound.hint(); vibrate(10);
+    Sound.hint(); vibrate(10); G.hintsUsed++;
     if (G.mode !== 'zen') { S.hints--; save(); }
     updateTools();
   });
@@ -640,13 +651,42 @@
     } else if (G.mode === 'zen') earn.push([t('cFirst'), 10]);
     if (G.bonus) earn.push([t('cStreak'), G.bonus]);
     const coinsWon = earn.reduce((a, e) => a + e[1], 0);
+    // ——— إحصائيات الجولة ———
+    const ms = Math.max(1000, Date.now() - G.t0), secs = ms / 1000, total = engine.total;
+    const acc = Math.round(100 * total / (total + G.misses));
+    const score = G.mode === 'zen' ? 0 : Math.max(total * 5, Math.round(total * 10 + stars * 100 + G.best * 5
+      + Math.max(0, (total * 2.5 - secs) * 4) - G.hintsUsed * 25));
+    const td = today();
+    if (S.today.d !== td) S.today = { d: td, n: 0 };
+    S.today.n++; S.wins = (S.wins || 0) + 1;
+    const rk = G.mode === 'journey' ? 'j' + G.n : G.mode === 'daily' ? 'd' + td : packId ? 'p' + packId : null;
+    const prev = rk && S.rec[rk];
+    const newScore = !!rk && !!prev && score > prev.s, newTime = !!rk && !!prev && ms < prev.t;
+    if (rk) S.rec[rk] = { s: Math.max(score, prev ? prev.s : 0), t: Math.min(ms, prev ? prev.t : ms) };
     S.coins += coinsWon;
     save(); updateTools();
     const name = esc(G.level.picName[S.set.lang]);
     const love = G.mode === 'gift';
     const sub = G.mode === 'daily' ? t('dailyWin') : love ? `${t('loveWin')}: <b style="color:#e5383b">${name}</b>` : `${t('winSub')}: <b>${name}</b>`;
     const flawless = G.mode !== 'zen' && engine.mistakes === 0 ? `<p style="color:var(--ok);font-weight:700;margin-top:-6px">${t('perfect')}</p>` : '';
-    const bestLine = G.best >= 3 ? `<p class="m-best">🔥 ${t('bestStreak')}: <b>${G.best}</b></p>` : '';
+    const mmss = x => { const v = Math.round(x / 1000); return String(Math.floor(v / 60)).padStart(2, '0') + ':' + String(v % 60).padStart(2, '0'); };
+    const recB = on => on ? ` <i class="st-rec">${t('newRecord')}</i>` : '';
+    const statsHtml = `<div class="m-stats">
+        ${G.diff ? `<div><span>${t('stDiff')}</span><b>${t(G.diff)}</b></div>` : ''}
+        <div><span>${t('stTime')}</span><b>${recB(newTime)}${mmss(ms)}</b></div>
+        ${G.mode === 'zen' ? '' : `<div><span>${t('stScore')}</span><b>${recB(newScore)}<em id="m-score">0</em></b></div>`}
+        <div><span>${t('stToday')}</span><b>${S.today.n}</b></div>
+      </div>
+      <div class="m-chips">
+        <span title="${t('stAcc')}">${icon('i-target')}<b>${acc}%</b></span>
+        <span title="${t('stMiss')}">${icon('i-x')}<b>${G.misses}</b></span>
+        <span title="${t('stHints')}">${icon('i-bulb')}<b>${G.hintsUsed}</b></span>
+        ${G.best >= 3 ? `<span title="${t('bestStreak')}">${icon('i-fire')}<b>${G.best}</b></span>` : ''}
+      </div>`;
+    const path = G.mode === 'journey' ? `<div class="m-path">${[0, 1, 2, 3, 4].map(i => {
+      const n = G.n + i, cls = i === 0 ? 'cur' : n < S.level ? 'done' : n === S.level ? 'next' : '';
+      return `<span class="${cls}">${n}</span>`;
+    }).join('')}</div>` : '';
     const bonusBtn = !love && Ads.ready() ? `<button class="btn ad-btn" data-a="bonus">${t('adBonus')}</button>` : '';
     const hasNextPack = G.mode === 'pack' && G.pk + 1 < Gen.packPics().length;
     const nextBtn = G.mode === 'journey' || hasNextPack ? `<button class="btn primary" data-a="next">${t('next')} ➜</button>` : G.mode === 'zen' ? `<button class="btn primary" data-a="zen">${t('newZen')}</button>` : '';
@@ -655,9 +695,10 @@
       <canvas id="m-pic"></canvas>
       ${G.mode === 'zen' ? '' : `<div class="m-stars">${[1, 2, 3].map(i => icon('i-star', i <= stars ? 'on' : '')).join('')}</div>`}
       ${flawless}
-      ${bestLine}
+      ${statsHtml}
       ${coinsWon ? `<div class="m-coins"><div class="mc-rows">${earn.filter(e => e[1]).map(e => `<span>${esc(e[0])}<b>+${e[1]}</b></span>`).join('')}</div><div class="mc-total">${icon('i-coin')}<b id="m-coin-n">+0</b></div></div>` : ''}
       ${rewards.length ? `<div class="m-reward">${t('reward')}: ${rewards.join(' ')}</div>` : ''}
+      ${path}
       <div class="m-actions">${S.chestReady ? `<button class="btn chest-btn" data-a="chest">${icon('i-chest')} ${t('openChest')}</button>` : ''}${nextBtn}${bonusBtn}${homeBtn}</div>`,
     {
       chest: () => openChest(),
@@ -673,6 +714,9 @@
     });
     document.querySelectorAll('.m-stars .ico.on').forEach((el, i) => { el.style.animationDelay = (0.15 + i * 0.18) + 's'; });
     if (coinsWon) countUp($('m-coin-n'), coinsWon, 700);
+    const scEl = $('m-score');
+    if (scEl) { const s0 = performance.now(); const tick = now => { const p = Math.min(1, (now - s0) / 900); scEl.textContent = Math.round(score * (1 - Math.pow(1 - p, 3))); if (p < 1 && scEl.isConnected) requestAnimationFrame(tick); }; requestAnimationFrame(tick); }
+    if (newScore || newTime) setTimeout(() => { Sound.reward && Sound.reward(); vibrate([15, 30, 15]); }, 900);
     coinUI();
     const sp = G.level.spec || {};
     requestAnimationFrame(() => drawArt($('m-pic'), G.mode === 'gift' ? null : sp.pic, sp.w || sp.f, sp.mirror, 'full', G.level));

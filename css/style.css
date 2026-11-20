@@ -370,3 +370,27 @@ body[data-theme="dark"] .ld.today{background:linear-gradient(135deg,#43213a,#3a2
 
 /* v2.3: أداء الجوال — بدون backdrop-filter، والرقعة طبقة لحالها */
 #board{will-change:transform}
+
+/* ——— إحصائيات الفوز ——— */
+.m-stats{background:var(--cell);border-radius:18px;padding:8px 14px;margin:0 0 8px;display:flex;flex-direction:column}
+.m-stats>div{display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:15px}
+.m-stats>div+div{border-top:1px solid rgba(128,100,60,.12)}
+.m-stats span{color:var(--sub);font-weight:600}
+.m-stats b{font-weight:800;font-size:17px;display:flex;align-items:center;gap:6px;direction:ltr}
+.m-stats em{font-style:normal}
+.st-rec{font-style:normal;font-size:11px;font-weight:800;color:#fff;background:linear-gradient(135deg,#ff9f1a,#ff5e62);border-radius:99px;padding:2px 8px;animation:recPop .5s .9s cubic-bezier(.2,1.6,.4,1) both}
+@keyframes recPop{from{transform:scale(0)}to{transform:scale(1)}}
+.m-chips{direction:ltr;display:flex;background:var(--cell);border-radius:18px;padding:8px 4px;margin:0 0 12px}
+.m-chips span{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;font-size:17px;direction:ltr}
+.m-chips span+span{border-left:1.5px solid rgba(128,100,60,.18)}
+.m-chips .ico{width:20px;height:20px;color:#c87a32}
+.m-chips span:nth-child(2) .ico{color:#e05a4a}
+.m-chips span:nth-child(3) .ico{color:#e8a200}
+.m-chips span:nth-child(4) .ico{color:#ff7a1a}
+.m-path{display:flex;justify-content:space-between;align-items:center;position:relative;margin:2px 6px 14px;direction:ltr}
+.m-path:before{content:"";position:absolute;left:10px;right:10px;top:50%;height:8px;margin-top:-4px;border-radius:9px;background:var(--cell)}
+.m-path span{position:relative;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:15px;color:#fff;background:#c9b8a0;box-shadow:0 0 0 3px var(--card)}
+.m-path span.done{background:#c87a32}
+.m-path span.next{background:#8e44ad;animation:pulse 1.4s ease-in-out infinite}
+.m-path span.cur{width:46px;height:46px;font-size:17px;background:#8e44ad;box-shadow:0 0 0 3px var(--card),0 0 0 6px rgba(142,68,173,.35)}
+.modal-card canvas#m-pic{width:150px;height:150px}
