@@ -92,6 +92,25 @@
     }
   }
   const picBoard = id => Gen.buildBoard(PICTURES.find(p => p.id === id), 32, false);
+  /** النسخة الناعمة (HD) من لوحة — null إذا ما إلها نسخة (لوحات التعليم والهدايا) */
+  function picHD(id, size, mirror, cb, k) {
+    const pic = PICTURES.find(p => p.id === id);
+    if (!pic || !(pic.shapes || pic.hd)) return null;
+    return hdCanvas(pic, Math.max(6, Math.round(size || 20)), !!mirror, k || 32, false, cb);
+  }
+  /** يرسم لوحة بنسختها الناعمة إذا موجودة، وإلا بالبكسل */
+  function drawArt(canvas, id, size, mirror, mode, fallback) {
+    const hd = id ? picHD(id, size, mirror, () => drawArt(canvas, id, size, mirror, mode, fallback)) : null;
+    if (!hd || !hd._ready) { if (fallback) drawPic(canvas, fallback, mode); return; }
+    const dpr = Math.min(3, window.devicePixelRatio || 1), sz = canvas.clientWidth || canvas.width;
+    canvas.width = sz * dpr; canvas.height = sz * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, sz, sz);
+    const s = Math.min(sz / hd.width, sz / hd.height) * 0.96, w = hd.width * s, h = hd.height * s;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(hd, (sz - w) / 2, (sz - h) / 2, w, h);
+    if (mode === 'silhouette') { ctx.globalCompositeOperation = 'source-in'; ctx.fillStyle = cssVar('--cell'); ctx.fillRect(0, 0, sz, sz); ctx.globalCompositeOperation = 'source-over'; }
+  }
   const picCount = () => Gen.mainPics().filter(p => S.pics[p.id]).length;
 
   // ——— الشاشات ———
@@ -138,7 +157,7 @@
     $('h-level').textContent = t('level') + ' ' + S.level;
     const spec = Gen.levelSpec(S.level);
     const cv = $('h-mystery');
-    drawPic(cv, Gen.buildBoard(PICTURES.find(p => p.id === spec.pic), spec.w || spec.f, spec.mirror), 'silhouette');
+    drawArt(cv, spec.pic, spec.w || spec.f, spec.mirror, 'silhouette', Gen.buildBoard(PICTURES.find(p => p.id === spec.pic), spec.w || spec.f, spec.mirror));
     $('h-pack').textContent = Gen.packPics().filter(p => S.pack[p.id]).length + '/' + Gen.packPics().length;
     renderRank(); renderChestBar();
     $('h-daily').innerHTML = S.daily.last === today() ? t('dailyDone') : (S.daily.streak > 0 && S.daily.last === yesterday() ? icon('i-fire') + ' ' + t('streak') + ' ' + S.daily.streak : t('dailyHard').replace('{n}', Gen.dailyIndex(today()) + 1));
@@ -165,7 +184,7 @@
     const pics = Gen.mainPics();
     $('gal-count').textContent = picCount() + '/' + pics.length;
     g.innerHTML = pics.map(p => `<div class="gal ${S.pics[p.id] ? '' : 'locked'}"><canvas data-p="${p.id}"></canvas><span>${S.pics[p.id] ? p.name[S.set.lang] : '؟'}</span></div>`).join('');
-    requestAnimationFrame(() => g.querySelectorAll('canvas').forEach(c => drawPic(c, picBoard(c.dataset.p), S.pics[c.dataset.p] ? 'full' : 'silhouette')));
+    requestAnimationFrame(() => g.querySelectorAll('canvas').forEach(c => drawArt(c, c.dataset.p, 24, false, S.pics[c.dataset.p] ? 'full' : 'silhouette', picBoard(c.dataset.p))));
   }
 
   // ——— حيوانات من أسهم + الخرائط الخاصة (هدايا عبر رابط) ———
@@ -207,8 +226,9 @@
     }));
     requestAnimationFrame(() => g.querySelectorAll('.pk').forEach(b => {
       const k = b.dataset.k;
-      const board = k[0] === 'g' ? gl.find(x => x.id === k.slice(2)).board : Gen.packBoard(+k.slice(2));
-      drawPic(b.querySelector('canvas'), board, 'full');
+      if (k[0] === 'g') { drawPic(b.querySelector('canvas'), gl.find(x => x.id === k.slice(2)).board, 'full'); return; }
+      const i = +k.slice(2), pic = Gen.packPics()[i];
+      drawArt(b.querySelector('canvas'), pic.id, 20, false, 'full', Gen.packBoard(i));
     }));
   }
 
@@ -340,6 +360,16 @@
     hideCoach(); hideNudge(true); closeModal(); setLensUI(false); clearFx();
     show('game');
     engine.load(level, { hearts, zen });
+    // نجهّز النسخة الناعمة من اللوحة (تظهر مكان البكسلات لحظة الفوز)
+    const sp = level.spec || {};
+    if (sp.pic && G.mode !== 'gift') setTimeout(() => {
+      if (engine.L !== level) return;
+      const pic = PICTURES.find(p => p.id === sp.pic);
+      if (!pic || !(pic.shapes || pic.hd)) return;
+      const sz = Math.max(6, Math.round(sp.w || sp.f)), r = rasterize(pic, sz, !!sp.mirror);
+      if (r.W !== level.W || r.H !== level.H) return;
+      engine.hd = picHD(sp.pic, sz, sp.mirror, null, Math.min(48, Math.max(24, Math.round(1300 / Math.max(level.W, level.H)))));
+    }, 450);
     idleArm();
     const cells = level.mask.reduce((a, b) => a + b, 0);
     const diff = Gen.difficultyOf(level.art ? level.arrows.length * 3.5 : cells);
@@ -641,7 +671,8 @@
     document.querySelectorAll('.m-stars .ico.on').forEach((el, i) => { el.style.animationDelay = (0.15 + i * 0.18) + 's'; });
     if (coinsWon) countUp($('m-coin-n'), coinsWon, 700);
     coinUI();
-    requestAnimationFrame(() => drawPic($('m-pic'), G.level, 'full'));
+    const sp = G.level.spec || {};
+    requestAnimationFrame(() => drawArt($('m-pic'), G.mode === 'gift' ? null : sp.pic, sp.w || sp.f, sp.mirror, 'full', G.level));
   }
 
   function onLose() {

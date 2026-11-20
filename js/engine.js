@@ -37,6 +37,7 @@
     load(level, opts) {
       opts = opts || {};
       this.L = level;
+      this.hd = null; this.hdA = 0; this.wonT = 0; this.hdSweep = false;   // النسخة الناعمة (HD) اللي تظهر بعد الفوز
       this.art = !!level.art;   // وضع "اللوحة من أسهم": كل سهم بلون الرسمة تحته
       const W = this.W = level.W, H = this.H = level.H;
       this.occ = new Int32Array(W * H).fill(-1);
@@ -362,10 +363,17 @@
       if (this.left === 0 && !this.won && !exiting) {
         this.won = true;
         for (let i = 0; i < this.target.length; i++) if (this.L.mask[i]) this.target[i] = 1;
-        this.winT = 1.9; busy = true;
+        this.winT = this.hd ? 2.5 : 1.9; busy = true;
         this.sweep = { t: 0, dur: 1.1, a: 0.6 };
         this.popFx = { t: 0, dur: 0.55, amp: 0.045 };
         this._confetti();
+      }
+      if (this.won && this.hd && this.hd._ready && this.hdA < 1) {
+        // البكسلات تذوب وتطلع مكانها اللوحة الحقيقية
+        this.wonT += dt;
+        this.hdA = clamp((this.wonT - 0.55) / 0.9, 0, 1);
+        if (this.hdA > 0 && !this.hdSweep) { this.hdSweep = true; this.sweep = { t: 0, dur: 1.2, a: 0.55 }; }
+        busy = true;
       }
       if (this.sweep) { this.sweep.t += dt; if (this.sweep.t > this.sweep.dur + 0.3) this.sweep = null; else busy = true; }
       if (this.popFx) { this.popFx.t += dt; if (this.popFx.t > this.popFx.dur) this.popFx = null; else busy = true; }
@@ -405,6 +413,8 @@
         ctx.translate(W / 2, H / 2); ctx.scale(k, k); ctx.translate(-W / 2, -H / 2);
       }
 
+      const fade = 1 - (this.hdA || 0);
+      ctx.globalAlpha = fade;
       // ظل ناعم تحت الرقعة
       ctx.save();
       ctx.translate(0.14, 0.22);
@@ -421,7 +431,7 @@
         const r = Math.max(ghost, this.reveal[i]);
         if (r <= 0.001) continue;
         const x = i % W, y = (i / W) | 0;
-        ctx.globalAlpha = Math.min(1, r);
+        ctx.globalAlpha = Math.min(1, r) * fade;
         ctx.fillStyle = L.color[i];
         if (r >= 0.999) {
           ctx.fillRect(x - 0.01, y - 0.01, 1.02, 1.02);   // بكسل متصل بدون فراغات
@@ -434,12 +444,23 @@
           ctx.fill();
         }
       }
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = fade;
       // إطار شكل الرقعة
       ctx.strokeStyle = th.edge || th.cell;
       ctx.lineWidth = Math.max(0.06, 1.2 / v.s);
       ctx.lineCap = 'round';
       ctx.stroke(this.edgePath);
+      ctx.globalAlpha = 1;
+      if (this.hdA > 0) {
+        const e = easeOut(this.hdA), k = 0.94 + 0.06 * e;
+        ctx.save();
+        ctx.globalAlpha = e;
+        ctx.translate(W / 2, H / 2); ctx.scale(k, k); ctx.translate(-W / 2, -H / 2);
+        ctx.shadowColor = 'rgba(40,20,70,.28)'; ctx.shadowBlur = 22 * this.dpr; ctx.shadowOffsetY = 8 * this.dpr;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(this.hd, 0, 0, W, H);
+        ctx.restore();
+      }
       // نقاط خفيفة على الخانات الفارغة
       ctx.fillStyle = th.dot || th.ink;
       ctx.globalAlpha = 0.16;
