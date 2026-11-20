@@ -483,3 +483,22 @@ body[data-theme="dark"] .icon-btn:not(.ghost){background:rgba(46,40,88,.92);bord
 .win .m-actions .btn{flex:1 1 40%;padding:11px 6px;font-size:15px}
 .win .m-actions .btn.primary,.win .m-actions .chest-btn{flex-basis:100%}
 .win .m-actions .btn.primary{font-size:19px;padding:13px}
+
+/* ——— كلام التحفيز خارج الخريطة: فوق شريط المعلومات ——— */
+.hud{position:relative}
+.hud .fx{inset:-6px -10px -8px;overflow:visible;z-index:6}
+.hud .floater{top:50%;display:flex;align-items:center;gap:8px;background:var(--card);border:2px solid var(--glass-b);border-radius:999px;padding:3px 8px 3px 16px;box-shadow:0 6px 18px rgba(0,0,0,.18);animation:floatLane 1.25s cubic-bezier(.2,.8,.2,1) forwards}
+.hud .floater b{font-size:28px;padding:0 2px}
+.hud .floater small{margin:0;font-size:13px;padding:3px 10px}
+.hud .floater.info{top:50%;padding:0;border:0;background:none;box-shadow:none;animation-duration:1.6s}
+.hud .floater.info b{font-size:17px;padding:7px 16px}
+.hud .floater.gone{animation:floatLaneGone .14s ease forwards}
+@keyframes floatLane{0%{opacity:0;transform:translate(-50%,-50%) scale(.4)}14%{opacity:1;transform:translate(-50%,-50%) scale(1.12)}28%{transform:translate(-50%,-50%) scale(1)}80%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-50%) scale(.85)}}
+@keyframes floatLaneGone{to{opacity:0;transform:translate(-50%,-50%) scale(.8)}}
+.hud .coach{top:-4px;left:0;right:0;z-index:7;padding:8px 12px;font-size:14px;line-height:1.45}
+/* التلميحات الصغيرة: مكان عنوان المرحلة بين زر الرجوع وزر الإعادة */
+#game .bar{position:relative}
+#game .bar .nudge{left:54px;right:54px;bottom:auto;top:50%;width:auto;max-width:none;transform:translateY(-50%);padding:5px 10px 5px 8px;gap:8px;font-size:12.5px;line-height:1.35;border-radius:14px;z-index:8;animation:nudgeBar .4s cubic-bezier(.2,1.4,.4,1)}
+#game .bar .nudge #nudge-t{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#game .bar .nudge .nudge-ic{width:24px;height:24px;font-size:14px}
+@keyframes nudgeBar{from{opacity:0;transform:translateY(-50%) scale(.9)}to{opacity:1;transform:translateY(-50%)}}

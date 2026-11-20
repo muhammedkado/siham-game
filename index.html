@@ -104,19 +104,22 @@
       <button class="icon-btn" id="g-back" aria-label="back"><svg class="ico flip"><use href="#i-back"/></svg></button>
       <h2 id="g-title"></h2>
       <button class="icon-btn" id="g-restart" aria-label="restart"><svg class="ico"><use href="#i-restart"/></svg></button>
+      <button class="nudge hidden" id="nudge"><span class="nudge-ic">💡</span><span id="nudge-t"></span></button>
     </header>
+    <div class="hud">
     <div class="g-stats">
       <div class="chip" id="g-left-chip"><svg class="ico sm"><use href="#i-arrow"/></svg><b id="g-left">0</b></div>
       <div class="hearts" id="g-hearts"></div>
       <div class="chip" id="g-diff"></div>
     </div>
     <div class="progress"><div class="bar-fill" id="g-bar"></div><span id="g-pct"></span><span class="streak" id="g-streak"></span></div>
+      <!-- كلام التحفيز والتعليم فوق شريط المعلومات، لا فوق الخريطة -->
+      <div class="fx" id="fx"></div>
+      <div class="coach hidden" id="coach"></div>
+    </div>
     <div class="board-wrap">
       <canvas id="board"></canvas>
       <div class="glow" id="glow"></div>
-      <div class="fx" id="fx"></div>
-      <div class="coach hidden" id="coach"></div>
-      <button class="nudge hidden" id="nudge"><span class="nudge-ic">💡</span><span id="nudge-t"></span></button>
     </div>
     <footer class="tools">
       <button class="tool" id="t-hint"><span class="tool-ic"><svg class="ico"><use href="#i-bulb"/></svg><i class="badge" id="b-hint"></i></span><label data-i18n="hint"></label></button>
@@ -223,7 +226,7 @@
       <a class="set-row" id="set-policy" href="https://muhammedkado.github.io/siham-game/privacy.html" target="_blank" rel="noopener"><span data-i18n="privacyPolicy"></span><b>›</b></a>
       <a class="set-row apk-row hidden" id="set-apk" href="siham.apk" download="siham.apk"><span><span data-i18n="getApk"></span><small data-i18n="getApkSub"></small></span><b>⬇</b></a>
       <button class="btn-danger" id="set-reset" data-i18n="reset"></button>
-      <p class="version">Siham 2.8</p>
+      <p class="version">Siham 2.9</p>
     </div>
   </section>
 
