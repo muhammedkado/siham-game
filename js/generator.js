@@ -196,12 +196,17 @@
           const o = occ[ny * W + nx];
           if (o < 0) continue;
           const a = arrows[o];
-          if (a.cells[0] !== ny * W + nx || a.cells.length >= maxExt || rayMax[c] >= o || !same(c, a.cells[0])) continue;
-          opts.push(a);
+          if (a.cells.length >= maxExt) continue;
+          // ذيل: آمن إذا ما في سهم لاحق طريقه بيمر بالخانة
+          if (a.cells[0] === ny * W + nx && rayMax[c] < o && same(c, a.cells[0])) opts.push([a, 0]);
+          // رأس: السهم يتقدم خانة لقدام بطريقه، آمن إذا ما في سهم لاحق طريقه بيمر فيها
+          const hd = a.cells[a.cells.length - 1];
+          if (params.head !== false && hd === ny * W + nx && cx === nx + DIRS[a.dir][0] && cy === ny + DIRS[a.dir][1] && rayMax[c] === o && same(c, hd)) opts.push([a, 1]);
         }
         if (!opts.length) continue;
-        const a = opts[Math.floor(R() * opts.length)];
-        a.cells.unshift(c); occ[c] = a.id; grown++;
+        const [a, isHead] = opts[Math.floor(R() * opts.length)];
+        if (isHead) a.cells.push(c); else a.cells.unshift(c);
+        occ[c] = a.id; grown++;
       }
       return grown;
     }
@@ -284,7 +289,7 @@
     const board = spec.board || buildBoard(pic, spec.w || spec.f, spec.mirror);
     const cellsInMask = Math.max(1, board.mask.reduce((s, v, i) => s + (v && !(spec.lock && board.fixed && board.fixed[i]) ? 1 : 0), 0));
     let best = null;
-    const tries = spec.tries || 4;
+    const tries = spec.tries || 8;
     for (let t = 0; t < tries; t++) {
       const seed = (spec.seed + t * 7919) >>> 0;
       const arrows = fill(board, spec, seed);
