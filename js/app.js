@@ -15,6 +15,8 @@
     login: { last: null, day: 0 },
     // إحصائيات: أفضل نتيجة لكل مرحلة + عدد مراحل اليوم
     rec: {}, today: { d: null, n: 0 }, wins: 0,
+    // الحساب ولوحة الصدارة: الاسم والصورة + نقاط هذا الأسبوع
+    prof: { n: '', a: -1, t: 0 }, wk: { id: '', s: 0 },
   };
   const fresh = () => JSON.parse(JSON.stringify(DEFAULT));
   let S;
@@ -22,7 +24,13 @@
   S.set = Object.assign({}, DEFAULT.set, S.set);
   S.daily = Object.assign({}, DEFAULT.daily, S.daily);
   S.own = Object.assign(fresh().own, S.own); S.eq = Object.assign(fresh().eq, S.eq); S.login = Object.assign(fresh().login, S.login);
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignore */ } };
+  S.prof = Object.assign(fresh().prof, S.prof);
+  if (S.prof.a < 0) S.prof.a = Math.floor(Math.random() * 24);
+  let cloudOn = false, cloudT = 0;
+  const save = () => {
+    try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignore */ }
+    if (cloudOn) { clearTimeout(cloudT); cloudT = setTimeout(() => cloudPush(), 4000); }
+  };
 
   const t = k => (I18N[S.set.lang] || I18N.ar)[k] || I18N.ar[k] || k;
 
@@ -128,11 +136,12 @@
     if (id === 'settings') renderSettings();
     if (id === 'pack') renderPack();
     if (id === 'shop') renderShop();
+    if (id === 'ranks') renderRanks();
     coinUI();
     Ads.banner(id !== 'game');
     if (id === 'game') requestAnimationFrame(() => engine.resize());
     else { Music.stop(); idleStop(); }
-    if (id === 'home') setTimeout(maybeLogin, 350);
+    if (id === 'home') setTimeout(() => { maybeLogin(); setTimeout(maybeAskAccount, 600); }, 350);
   }
   document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => { Sound.click(); show(b.dataset.go); }));
 
@@ -255,6 +264,7 @@
     $('set-apk').classList.toggle('hidden', !!NATIVE || location.protocol === 'file:');
     document.querySelectorAll('#set-theme button').forEach(b => b.classList.toggle('on', b.dataset.v === S.set.theme));
     document.querySelectorAll('#set-lang button').forEach(b => b.classList.toggle('on', b.dataset.v === S.set.lang));
+    $('set-acc-sub').textContent = accLabel();
     $('set-music').checked = S.set.music;
     $('set-sound').checked = S.set.sound; $('set-vibe').checked = S.set.vibe; $('set-safe').checked = S.set.safe;
   }
@@ -265,12 +275,13 @@
     S.set.music = e.target.checked; save();
     Music.setEnabled(S.set.music);
   });
+  $('set-account').addEventListener('click', () => { Sound.click(); accountModal(); });
   $('set-privacy').addEventListener('click', () => { try { NATIVE.privacyOptions(); } catch (e) { /* ignore */ } });
   $('set-vibe').addEventListener('change', e => { S.set.vibe = e.target.checked; save(); vibrate(20); });
   $('set-safe').addEventListener('change', e => { S.set.safe = e.target.checked; save(); engine.safeTap = S.set.safe; });
   $('set-reset').addEventListener('click', () => {
     modal(`<h3>⚠️</h3><p>${t('resetConfirm')}</p><div class="m-actions"><button class="btn" data-a="yes" style="color:var(--danger)">${t('yes')}</button><button class="btn primary" data-a="no">${t('no')}</button></div>`, {
-      yes: () => { const set = S.set, gf = S.gifts; S = fresh(); S.set = set; S.gifts = gf; save(); applyStyle(); closeModal(); show('home'); },
+      yes: () => { const set = S.set, gf = S.gifts, pf = S.prof; S = fresh(); S.set = set; S.gifts = gf; S.prof = pf; save(); applyStyle(); closeModal(); show('home'); },
       no: closeModal,
     });
   });
@@ -659,6 +670,9 @@
     const td = today();
     if (S.today.d !== td) S.today = { d: td, n: 0 };
     S.today.n++; S.wins = (S.wins || 0) + 1;
+    const wid = window.Cloud ? Cloud.weekId() : '';
+    if (!S.wk || S.wk.id !== wid) S.wk = { id: wid, s: 0 };
+    S.wk.s += score;
     const rk = G.mode === 'journey' ? 'j' + G.n : G.mode === 'daily' ? 'd' + td : packId ? 'p' + packId : null;
     const prev = rk && S.rec[rk];
     const newScore = !!rk && !!prev && score > prev.s, newTime = !!rk && !!prev && ms < prev.t;
@@ -911,8 +925,207 @@
     requestAnimationFrame(() => { for (const c of cvs) drawArrowPreview(c, kind, +c.dataset.i, 0); shopRaf = requestAnimationFrame(loop); });
   }
 
+  // ——— الحساب والسحابة ولوحة الصدارة ———
+  const AVATARS = ['🐰', '🦊', '🐼', '🐯', '🦁', '🐸', '🐙', '🦄', '🐧', '🐨', '🐵', '🐱', '🐶', '🐻', '🐮', '🐷', '🐳', '🦋', '🐢', '🦉', '🐝', '🦀', '🐬', '🦒'];
+  const av = i => AVATARS[((i % AVATARS.length) + AVATARS.length) % AVATARS.length];
+  const CU = () => (window.Cloud && Cloud.ok ? Cloud.user : null);
+  function myName() {
+    if (S.prof.n) return S.prof.n;
+    const u = CU();
+    if (u && u.name) return u.name.split(' ')[0].slice(0, 16);
+    return t('player') + ' ' + (u ? u.uid.slice(-4).toUpperCase() : '');
+  }
+  const accLabel = () => { const u = CU(); return !u || u.anon ? t('guest') + ' · ' + t('saveProgress') : (u.email || 'Google'); };
+  const totalScore = () => Object.values(S.rec || {}).reduce((a, r) => a + (r.s || 0), 0) + 50 * totalStars();
+  const SKIP = { set: 1, gifts: 1, ad: 1 };
+  const mx = (a, b) => { const r = Object.assign({}, a); for (const k in b || {}) r[k] = Math.max(r[k] || 0, b[k] || 0); return r; };
+  const uni = (a, b) => [...new Set([...(a || []), ...(b || [])])].sort((x, y) => x - y);
+  const newer = (a, b, k) => ((b && b[k]) || '') > ((a && a[k]) || '') ? b : a;
+  /** دمج التقدم المحلي مع المحفوظ في السحابة: نأخذ الأفضل من الاثنين فلا يضيع شيء */
+  function mergeSave(a, b) {
+    const o = Object.assign({}, b, a);
+    o.level = Math.max(a.level || 1, b.level || 1);
+    o.stars = mx(a.stars, b.stars); o.pics = mx(a.pics, b.pics); o.pack = mx(a.pack, b.pack);
+    for (const k of ['coins', 'hints', 'lenses', 'chestReady', 'wins']) o[k] = Math.max(a[k] || 0, b[k] || 0);
+    o.own = { trail: uni(a.own && a.own.trail, b.own && b.own.trail), skin: uni(a.own && a.own.skin, b.own && b.own.skin) };
+    o.rec = Object.assign({}, b.rec);
+    for (const k in a.rec || {}) { const x = a.rec[k], y = o.rec[k]; o.rec[k] = y ? { s: Math.max(x.s, y.s), t: Math.min(x.t, y.t) } : x; }
+    o.daily = newer(a.daily, b.daily, 'last'); o.login = newer(a.login, b.login, 'last');
+    o.today = a.today && b.today && a.today.d === b.today.d ? { d: a.today.d, n: Math.max(a.today.n, b.today.n) } : newer(a.today, b.today, 'd');
+    o.wk = a.wk && b.wk && a.wk.id === b.wk.id ? { id: a.wk.id, s: Math.max(a.wk.s, b.wk.s) } : newer(a.wk, b.wk, 'id');
+    o.seen = Object.assign({}, b.seen, a.seen);
+    o.prof = ((b.prof && b.prof.t) || 0) > ((a.prof && a.prof.t) || 0) ? b.prof : a.prof;
+    return o;
+  }
+  let lastPub = '', pushing = null;
+  function cloudPush() {
+    if (!CU() || navigator.onLine === false) return Promise.resolve();
+    if (pushing) return pushing.then(() => cloudPush());
+    const data = {}; for (const k in S) if (!SKIP[k]) data[k] = S[k];
+    const who = { n: myName(), a: S.prof.a % AVATARS.length }, td = today(), dr = S.rec['d' + td], sc = totalScore();
+    const pub = JSON.stringify([who, sc, S.level, S.wk, dr && dr.t]);
+    pushing = (async () => {
+      await Cloud.save(JSON.stringify(data));
+      if (pub !== lastPub) {
+        const jobs = [];
+        if (sc > 0) jobs.push(Cloud.board(Object.assign({ s: sc, l: S.level }, who)));
+        if (S.wk && S.wk.id === Cloud.weekId() && S.wk.s > 0) jobs.push(Cloud.week(Object.assign({ s: S.wk.s }, who)));
+        if (dr && dr.t >= 3000) jobs.push(Cloud.day(Object.assign({ t: Math.round(dr.t) }, who)));
+        await Promise.all(jobs);
+        lastPub = pub;
+        for (const k in rkCache) delete rkCache[k];
+      }
+    })().catch(e => console.warn('cloud', e.message)).finally(() => { pushing = null; });
+    return pushing;
+  }
+  let cloudUid = null;
+  async function onCloudUser(u) {
+    cloudOn = true;
+    if (u.uid !== cloudUid) {
+      cloudUid = u.uid; lastPub = '';
+      try {
+        const raw = await Cloud.load();
+        if (raw) {
+          const keep = { set: S.set, gifts: S.gifts, ad: S.ad };
+          S = Object.assign(mergeSave(S, JSON.parse(raw)), keep);
+          if (!S.own.trail.includes(S.eq.trail)) S.eq.trail = 1;
+          if (!S.own.skin.includes(S.eq.skin)) S.eq.skin = 0;
+          try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignore */ }
+          applyStyle(); coinUI(); updateTools();
+          if (current !== 'game') show(current);
+        }
+      } catch (e) { console.warn('cloud load', e.message); }
+    }
+    if (current === 'settings') renderSettings();
+    if (current === 'ranks') renderRanksHead();
+    if (modalOpen && modalOpen.acct) accountModal();
+    cloudPush();
+  }
+
+  const AE = { 'auth/invalid-email': 'aeEmail', 'auth/missing-email': 'aeEmail', 'auth/wrong-password': 'aePass', 'auth/invalid-credential': 'aePass', 'auth/invalid-login-credentials': 'aePass', 'auth/user-not-found': 'aePass', 'auth/missing-password': 'aeWeak', 'auth/email-already-in-use': 'aeExists', 'auth/weak-password': 'aeWeak', 'auth/network-request-failed': 'aeNet', 'auth/too-many-requests': 'aeMany', 'auth/operation-not-allowed': 'aeOff', 'auth/unauthorized-domain': 'aeOff', 'auth/popup-blocked': 'aePopup' };
+  function accountModal(intro) {
+    const u = CU(), on = !!(window.Cloud && Cloud.ok);
+    const guestUser = !u || u.anon;
+    const avs = AVATARS.map((e, i) => `<button class="av ${i === S.prof.a % AVATARS.length ? 'on' : ''}" data-av="${i}">${e}</button>`).join('');
+    const prof = `<div class="ac-prof"><div class="ac-me"><span class="ac-av" id="ac-av">${av(S.prof.a)}</span><input id="ac-name" maxlength="16" value="${esc(myName())}" placeholder="${t('namePh')}"></div><div class="av-row">${avs}</div><small class="sub">${t('profile')}</small></div>`;
+    const google = on && Cloud.canGoogle() ? `<button class="btn g-btn" data-a="google"><svg viewBox="0 0 48 48" width="22" height="22"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg><span>${t('withGoogle')}</span></button><div class="ac-or"><span>${t('or')}</span></div>` : '';
+    const body = !on ? `<p class="sub">${t('needOnline')}</p>`
+      : guestUser ? `${google}<input id="ac-email" type="email" dir="ltr" autocomplete="email" placeholder="${t('email')}"><input id="ac-pass" type="password" dir="ltr" autocomplete="current-password" placeholder="${t('password')}">
+        <p class="ac-err" id="ac-err"></p>
+        <div class="ac-two"><button class="btn primary" data-a="in">${t('signIn')}</button><button class="btn" data-a="up">${t('signUp')}</button></div>
+        <button class="ac-link" data-a="forgot">${t('forgot')}</button>`
+      : `<div class="ac-who">${u.google ? '🟢 Google' : '✉️'} <b dir="ltr">${esc(u.email)}</b><small>${t('progressSafe')}</small></div><p class="ac-err" id="ac-err"></p>`;
+    modal(`<h3>${guestUser ? t('saveProgress') : t('account')}</h3>
+      ${guestUser ? `<p>${intro ? t('saveNudge') : t('saveProgressSub')}</p>` : ''}
+      ${prof}${body}
+      <div class="m-actions">${guestUser ? '' : `<button class="btn" data-a="out" style="color:var(--danger)">${t('signOut')}</button>`}<button class="btn" data-a="close">${guestUser ? t('later') : t('done')}</button></div>`, {
+      close: () => { saveProf(); closeModal(); },
+      google: () => run(() => Cloud.google()),
+      in: () => creds(Cloud.signIn),
+      up: () => creds(Cloud.signUp),
+      forgot: () => { const e = ($('ac-email').value || '').trim(); if (!e) return err('aeEmail'); run(() => Cloud.reset(e), () => toast(t('resetSent'), 3500)); },
+      out: () => modal(`<h3>👋</h3><p>${t('signOutQ')}</p><div class="m-actions"><button class="btn" data-a="yes" style="color:var(--danger)">${t('signOut')}</button><button class="btn primary" data-a="no">${t('no')}</button></div>`, {
+        no: () => accountModal(),
+        yes: async () => {
+          await cloudPush();
+          const set = S.set, gf = S.gifts; S = fresh(); S.set = set; S.gifts = gf; S.prof.a = Math.floor(Math.random() * 24);
+          cloudUid = null; lastPub = '';
+          try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignore */ }
+          await Cloud.signOut().catch(() => {});
+          applyStyle(); closeModal(); show('home');
+        },
+      }),
+    }, { acct: 1 });
+    const card = $('modal-card');
+    card.querySelectorAll('[data-av]').forEach(b => b.addEventListener('click', () => {
+      Sound.click(); S.prof.a = +b.dataset.av; S.prof.t = Date.now();
+      card.querySelectorAll('[data-av]').forEach(x => x.classList.toggle('on', x === b)); $('ac-av').textContent = av(S.prof.a); save();
+    }));
+    function saveProf() {
+      const el = $('ac-name'); if (!el) return;
+      const n = el.value.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
+      if (n && n !== myName()) { S.prof.n = n; S.prof.t = Date.now(); save(); }
+    }
+    function err(k) { const e = $('ac-err'); if (e) { e.textContent = t(k); e.classList.add('show'); } else toast(t(k)); Sound.bump(); }
+    function creds(fn) {
+      const e = ($('ac-email').value || '').trim(), p = $('ac-pass').value || '';
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return err('aeEmail');
+      if (p.length < 6) return err('aeWeak');
+      run(() => fn(e, p));
+    }
+    function run(job, done) {
+      if (navigator.onLine === false) return err('aeNet');
+      saveProf();
+      card.querySelectorAll('button,input').forEach(b => { b.disabled = true; });
+      card.classList.add('busy');
+      job().then(() => {
+        card.classList.remove('busy');
+        if (done) { done(); card.querySelectorAll('button,input').forEach(b => { b.disabled = false; }); return; }
+        closeModal(); Sound.reward(); toast(t('welcomeBack'), 3000);
+        if (current === 'ranks') renderRanks();
+      }).catch(e => {
+        card.classList.remove('busy');
+        card.querySelectorAll('button,input').forEach(b => { b.disabled = false; });
+        if (e && (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request')) return;
+        console.warn('auth', e && e.code, e && e.message);
+        err(AE[e && e.code] || 'aeGen');
+      });
+    }
+  }
+  /** بعد عدة مراحل كضيف: نذكّر مرة واحدة بحفظ التقدم */
+  function maybeAskAccount() {
+    const u = CU();
+    if (current !== 'home' || modalOpen || !u || !u.anon || S.level < 8 || S.seen.acct) return;
+    S.seen.acct = 1; save();
+    accountModal(true);
+  }
+
+  let rkTab = 'week';
+  const rkCache = {};
+  function renderRanksHead() {
+    const u = CU();
+    $('rk-acc').innerHTML = `<span class="ac-av">${av(S.prof.a)}</span><span class="rk-acc-t"><b>${esc(myName())}</b><small>${esc(accLabel())}</small></span><i>${!u || u.anon ? t('saveProgress') : '✎'}</i>`;
+    $('rk-acc').classList.toggle('guest', !u || u.anon);
+  }
+  async function renderRanks(force) {
+    renderRanksHead();
+    document.querySelectorAll('#rk-tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === rkTab));
+    const days = 7 - ((new Date().getUTCDay() + 6) % 7);
+    $('rk-note').textContent = rkTab === 'week' ? t('rkWeekNote').replace('{n}', days) : rkTab === 'all' ? t('rkAllNote') : t('rkDayNote');
+    const list = $('rk-list'), me = $('rk-me'), tab = rkTab;
+    if (!window.Cloud || !Cloud.ok || navigator.onLine === false) { list.innerHTML = `<p class="rk-empty">📡<br>${t('rkOffline')}</p>`; me.innerHTML = ''; return; }
+    const c = rkCache[tab];
+    if (!c) list.innerHTML = `<p class="rk-empty">${t('rkLoading')}</p>`;
+    try {
+      if (!c || force || Date.now() - c.at > 30000) {
+        await cloudPush();
+        rkCache[tab] = { at: Date.now(), rows: await Cloud.top(tab, 50) };
+      }
+      if (tab !== rkTab || current !== 'ranks') return;
+      const rows = rkCache[tab].rows, u = CU(), uid = u && u.uid;
+      const val = r => tab === 'day' ? fmtT(r.t) : r.s.toLocaleString('en');
+      const medal = i => i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1;
+      list.innerHTML = rows.length ? rows.map((r, i) => `<div class="rk-row ${r.id === uid ? 'me' : ''} ${i < 3 ? 'top' : ''}"><span class="rk-n">${medal(i)}</span><span class="rk-av">${av(r.a)}</span><b class="rk-name">${esc(r.n)}</b><span class="rk-v">${val(r)}</span></div>`).join('')
+        : `<p class="rk-empty">🏆<br>${t('rkEmpty')}</p>`;
+      const mine = tab === 'all' ? totalScore() : tab === 'week' ? (S.wk && S.wk.id === Cloud.weekId() ? S.wk.s : 0) : (S.rec['d' + today()] || {}).t;
+      const inTop = rows.findIndex(r => r.id === uid);
+      if (!mine) { me.innerHTML = `<div class="rk-row me"><span class="rk-n">–</span><span class="rk-av">${av(S.prof.a)}</span><b class="rk-name">${esc(myName())}</b><span class="rk-v small">${tab === 'day' ? t('rkPlayDaily') : t('rkPlay')}</span></div>`; return; }
+      const pos = inTop >= 0 ? inTop + 1 : await Cloud.rank(tab, mine);
+      if (tab !== rkTab) return;
+      me.innerHTML = `<div class="rk-row me"><span class="rk-n">${pos}</span><span class="rk-av">${av(S.prof.a)}</span><b class="rk-name">${esc(myName())} <small>(${t('rkYou')})</small></b><span class="rk-v">${tab === 'day' ? fmtT(mine) : mine.toLocaleString('en')}</span></div>`;
+    } catch (e) {
+      console.warn('ranks', e.message);
+      if (!rkCache[tab]) list.innerHTML = `<p class="rk-empty">📡<br>${t('rkOffline')}</p>`;
+    }
+  }
+  const fmtT = ms => { const v = Math.round(ms / 1000); return String(Math.floor(v / 60)).padStart(2, '0') + ':' + String(v % 60).padStart(2, '0'); };
+  document.querySelectorAll('#rk-tabs button').forEach(b => b.addEventListener('click', () => { Sound.click(); rkTab = b.dataset.v; renderRanks(); }));
+  $('rk-acc').addEventListener('click', () => { Sound.click(); accountModal(); });
+  if (window.Cloud && Cloud.ok) { Cloud.onUser(onCloudUser); Cloud.start(); }
+  document.addEventListener('visibilitychange', () => { if (document.hidden && cloudOn) { clearTimeout(cloudT); cloudPush(); } });
+
   // للاختبار
-  window.__siham = { engine, G, S: () => S, startLevel, startDaily, startZen, idleNudge, startPack, startGift, decodeGift, openChest, maybeLogin, show };
+  window.__siham = { engine, G, S: () => S, startLevel, startDaily, startZen, idleNudge, startPack, startGift, decodeGift, openChest, maybeLogin, show, accountModal, mergeSave };
 
   applyI18n(); applyTheme(); applyStyle(); show('home');
   checkGift();

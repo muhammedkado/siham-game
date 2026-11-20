@@ -394,3 +394,53 @@ body[data-theme="dark"] .ld.today{background:linear-gradient(135deg,#43213a,#3a2
 .m-path span.next{background:#8e44ad;animation:pulse 1.4s ease-in-out infinite}
 .m-path span.cur{width:46px;height:46px;font-size:17px;background:#8e44ad;box-shadow:0 0 0 3px var(--card),0 0 0 6px rgba(142,68,173,.35)}
 .modal-card canvas#m-pic{width:150px;height:150px}
+
+/* ——— المتصدّرون والحساب ——— */
+.rk-acc{display:flex;align-items:center;gap:10px;width:100%;background:var(--glass);border:1.5px solid var(--glass-b);border-radius:20px;padding:10px 12px;margin:4px 0 10px;text-align:start;box-shadow:var(--shadow)}
+.rk-acc .ac-av{width:46px;height:46px;font-size:28px}
+.rk-acc-t{flex:1;display:flex;flex-direction:column;min-width:0}
+.rk-acc-t b{font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rk-acc-t small{color:var(--sub);font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rk-acc i{font-style:normal;font-weight:800;font-size:13px;color:var(--sub)}
+.rk-acc.guest i{background:var(--candy);color:#fff;border-radius:99px;padding:7px 12px;box-shadow:0 3px 0 #d9466f;white-space:nowrap}
+.rk-note{margin:8px 0 2px;font-size:12.5px}
+#rk-list{display:flex;flex-direction:column;gap:6px}
+.rk-row{display:flex;align-items:center;gap:10px;background:var(--glass);border:1.5px solid var(--glass-b);border-radius:16px;padding:8px 12px}
+.rk-row.top{background:linear-gradient(135deg,#fff8dc,#ffefc2);border-color:#ffd95e}
+body[data-theme="dark"] .rk-row.top{background:linear-gradient(135deg,#3b2f12,#2c230e)}
+.rk-row.me{border-color:#8e44ad;box-shadow:0 0 0 2px rgba(142,68,173,.25)}
+.rk-n{width:30px;text-align:center;font-weight:800;font-size:16px;color:var(--sub)}
+.rk-row.top .rk-n{font-size:22px}
+.rk-av{width:36px;height:36px;border-radius:50%;background:var(--cell);display:grid;place-items:center;font-size:22px;flex:none}
+.rk-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15.5px}
+.rk-name small{color:var(--sub);font-weight:600}
+.rk-v{font-weight:800;font-size:16px;direction:ltr}
+.rk-v.small{font-size:12.5px;color:var(--sub)}
+.rk-empty{text-align:center;color:var(--sub);font-weight:700;padding:40px 10px;line-height:2;font-size:15px}
+#rk-me{padding:6px 0 4px}
+#rk-me:empty{display:none}
+#rk-me .rk-row{background:var(--card);box-shadow:var(--shadow)}
+.ac-prof{background:var(--cell);border-radius:18px;padding:10px;margin:4px 0 12px}
+.ac-me{display:flex;align-items:center;gap:10px}
+.ac-av{width:52px;height:52px;border-radius:50%;background:var(--card);display:grid;place-items:center;font-size:32px;flex:none;box-shadow:0 2px 6px rgba(0,0,0,.08)}
+.ac-me input,#modal-card input[type=email],#modal-card input[type=password]{flex:1;width:100%;min-width:0;border:2px solid transparent;background:var(--card);color:var(--ink);border-radius:14px;padding:11px 12px;font:inherit;font-weight:700;font-size:16px;outline:none}
+#modal-card input:focus{border-color:#8e44ad}
+#modal-card input[type=email],#modal-card input[type=password]{display:block;margin:0 0 8px;background:var(--cell)}
+.av-row{display:flex;gap:4px;overflow-x:auto;padding:8px 0 4px;scrollbar-width:none}
+.av-row::-webkit-scrollbar{display:none}
+.av{flex:none;width:38px;height:38px;border-radius:50%;font-size:22px;background:var(--card);border:2px solid transparent}
+.av.on{border-color:#8e44ad;transform:scale(1.08)}
+.ac-prof .sub{display:block;font-size:12px;color:var(--sub);margin-top:2px}
+.g-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;background:#fff;color:#1f1f1f;border:1.5px solid #dadce0;box-shadow:0 2px 0 #dadce0;font-size:16px}
+.ac-or{display:flex;align-items:center;gap:10px;color:var(--sub);font-weight:700;font-size:13px;margin:12px 0}
+.ac-or:before,.ac-or:after{content:"";flex:1;height:1.5px;background:var(--cell)}
+.ac-two{display:flex;gap:8px;margin-bottom:6px}
+.ac-two .btn{flex:1;padding:12px 6px;font-size:15px}
+.ac-link{color:var(--sub);font-weight:700;font-size:13px;text-decoration:underline;padding:6px;margin-bottom:6px}
+.ac-err{color:var(--danger);font-weight:700;font-size:13.5px;margin:0 0 8px!important;display:none}
+.ac-err.show{display:block}
+.ac-who{background:var(--cell);border-radius:16px;padding:12px;margin-bottom:12px;font-size:14px;display:flex;flex-direction:column;gap:4px;align-items:center}
+.ac-who b{word-break:break-all}
+.ac-who small{color:var(--ok);font-weight:700}
+.modal-card.busy{opacity:.7;pointer-events:none}
+.bottom-nav button{padding:5px 4px}
