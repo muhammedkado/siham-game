@@ -534,9 +534,11 @@
   }
   /** يحوّل لوحة أشكال إلى رقعة: العرض ≤ size والارتفاع ≤ size×1.4 (يناسب شاشة الجوال الطولية) */
   function rasterize(pic, size, mirror, soft) {
+    if (!pic) return null;
     const key = pic.id + '|' + size + '|' + (mirror ? 1 : 0) + (soft ? '|s' : '');
     if (rasterCache[key]) return rasterCache[key];
     if (pic.grid) return (rasterCache[key] = fromGrid(pic.grid, mirror));
+    if (!pic.shapes) return null;
     const [VW0, VH0] = pic.view || [100, 100];
     const shapes = pic.shapes.map(prep);
     // حدود الرسمة الفعلية
@@ -660,7 +662,7 @@
       if (im._ok) draw(im); else im._cbs.push(() => draw(im));
       return cv;
     }
-    const vt = r.vt, sc = k / vt.cs, pad = Math.max(1.4, 0.12 * k);   // pad: سماكة الحدود (بكسل)
+    const vt = r.vt, sc = k / vt.cs, pad = Math.max(1.2, 0.10 * k);   // pad: سماكة الحدود (بكسل)
     // طبقة الألوان
     const lay = mkCanvas(cv.width, cv.height), L = lay.getContext('2d');
     L.setTransform(1, 0, 0, 1, 0, 0);
@@ -702,12 +704,12 @@
       L.beginPath(); L.ellipse(hx, b[1] + h * 0.24, w * 0.12, h * 0.07, mirror ? 0.6 : -0.6, 0, Math.PI * 2); L.fill();
       L.restore();
     }
-    // الحدود الخارجية: نسخة داكنة من الرسمة نفسها مزاحة بكل الاتجاهات
+    // الحدود الخارجية: نسخة داكنة مزاحة (8 اتجاهات بدل 16 لأداء أفضل على الجوال)
     if (!soft) {
       const dk = mkCanvas(cv.width, cv.height), D = dk.getContext('2d');
       D.drawImage(lay, 0, 0);
       D.globalCompositeOperation = 'source-atop'; D.fillStyle = 'rgba(30,22,48,.82)'; D.fillRect(0, 0, dk.width, dk.height);
-      for (let a = 0; a < 16; a++) { const an = a * Math.PI / 8; g.drawImage(dk, Math.cos(an) * pad, Math.sin(an) * pad); }
+      for (let a = 0; a < 8; a++) { const an = a * Math.PI / 4; g.drawImage(dk, Math.cos(an) * pad, Math.sin(an) * pad); }
     }
     g.drawImage(lay, 0, 0);
     cv._ready = true; cv._cbs = [];

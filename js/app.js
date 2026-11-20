@@ -368,7 +368,7 @@
       if (!pic || !(pic.shapes || pic.hd)) return;
       const sz = Math.max(6, Math.round(sp.w || sp.f)), r = rasterize(pic, sz, !!sp.mirror);
       if (r.W !== level.W || r.H !== level.H) return;
-      engine.hd = picHD(sp.pic, sz, sp.mirror, null, Math.min(48, Math.max(24, Math.round(1300 / Math.max(level.W, level.H)))));
+      engine.hd = picHD(sp.pic, sz, sp.mirror, null, 32);
     }, 450);
     idleArm();
     const cells = level.mask.reduce((a, b) => a + b, 0);

@@ -414,6 +414,9 @@
       }
 
       const fade = 1 - (this.hdA || 0);
+      // إذا الصورة الناعمة ظاهرة بالكامل، ما نرسم البكسلات تحتها (أسرع بكثير)
+      const skipPixels = fade < 0.02;
+      if (!skipPixels) {
       ctx.globalAlpha = fade;
       // ظل ناعم تحت الرقعة
       ctx.save();
@@ -451,12 +454,12 @@
       ctx.lineCap = 'round';
       ctx.stroke(this.edgePath);
       ctx.globalAlpha = 1;
+      } // end skipPixels
       if (this.hdA > 0) {
         const e = easeOut(this.hdA), k = 0.94 + 0.06 * e;
         ctx.save();
         ctx.globalAlpha = e;
         ctx.translate(W / 2, H / 2); ctx.scale(k, k); ctx.translate(-W / 2, -H / 2);
-        ctx.shadowColor = 'rgba(40,20,70,.28)'; ctx.shadowBlur = 22 * this.dpr; ctx.shadowOffsetY = 8 * this.dpr;
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(this.hd, 0, 0, W, H);
         ctx.restore();
@@ -534,14 +537,18 @@
       }
       // العدسة
       if (this.lens) this._drawLens(lw);
-      // لمعة الفوز تمر على اللوحة
+      // لمعة الفوز تمر على اللوحة (باستخدام source-atop السريع بدون قص مسارات ثقيل)
       if (this.sweep) {
         const p = Math.min(1, this.sweep.t / this.sweep.dur);
         const dx = 0.86, dy = 0.5, Lh = (W + H) * 0.75;
         const cx = W / 2 + dx * (-Lh + 2 * Lh * easeInOut(p)), cy = H / 2 + dy * (-Lh + 2 * Lh * easeInOut(p));
         const g = ctx.createLinearGradient(cx - dx * 3, cy - dy * 3, cx + dx * 3, cy + dy * 3);
         g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, 'rgba(255,255,255,' + this.sweep.a + ')'); g.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.save(); ctx.clip(this.maskPath); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); ctx.restore();
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, W, H);
+        ctx.restore();
       }
       // حلقات (لمسة / سلسلة)
       for (const r of this.rings) {
@@ -639,7 +646,7 @@
       for (let i = 0; i < this.L.color.length; i++) if (this.L.color[i]) cols.push(this.L.color[i]);
       if (love) cols = ['#e5383b', '#ff4d6d', '#ff8fab', '#ffb3c1', '#c9184a'];
       const k = Math.max(this.W, this.H);
-      for (let i = 0; i < 70; i++) {
+      for (let i = 0; i < 32; i++) {
         const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2, sp = (0.5 + Math.random() * 0.7) * k * 1.1;
         this.particles.push({
           x: this.W / 2 + (Math.random() - 0.5) * this.W * 0.3, y: this.H * 0.55,
