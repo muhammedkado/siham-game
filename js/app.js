@@ -852,30 +852,98 @@
     }
     return r;
   }
+  /** صندوق كنز مفصّل: الغطاء ينفصل عند الفتح ويظهر الضوء والكنز */
+  function chestSvg() {
+    return `<svg class="cm-svg" viewBox="0 0 200 180" aria-hidden="true"><defs>
+      <linearGradient id="cb-w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cf8030"/><stop offset="1" stop-color="#7d4112"/></linearGradient>
+      <linearGradient id="cb-l" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3ad52"/><stop offset="1" stop-color="#bf6c22"/></linearGradient>
+      <linearGradient id="cb-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff6b5"/><stop offset=".55" stop-color="#ffc82e"/><stop offset="1" stop-color="#e09400"/></linearGradient>
+      <radialGradient id="cb-glow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fffbe0"/><stop offset=".5" stop-color="#ffd65a"/><stop offset="1" stop-color="#ffb800" stop-opacity="0"/></radialGradient>
+      <clipPath id="cb-dome"><path d="M20 98C20 44 180 44 180 98z"/></clipPath></defs>
+      <ellipse cx="100" cy="166" rx="84" ry="9" fill="#000" opacity=".28"/>
+      <g class="cm-body">
+        <rect x="24" y="94" width="152" height="68" rx="11" fill="url(#cb-w)"/>
+        <path d="M70 96v64M100 96v64M130 96v64" stroke="#000" stroke-opacity=".14" stroke-width="1.6"/>
+        <rect x="35" y="94" width="17" height="68" fill="url(#cb-g)" stroke="#b97500" stroke-width="1"/>
+        <rect x="148" y="94" width="17" height="68" fill="url(#cb-g)" stroke="#b97500" stroke-width="1"/>
+        <rect x="24" y="151" width="152" height="12" rx="6" fill="url(#cb-g)" stroke="#b97500" stroke-width="1"/>
+        <g fill="#b46d00"><circle cx="43.5" cy="106" r="2.6"/><circle cx="43.5" cy="140" r="2.6"/><circle cx="156.5" cy="106" r="2.6"/><circle cx="156.5" cy="140" r="2.6"/></g>
+        <rect x="90" y="98" width="20" height="14" rx="3" fill="#6b3509"/>
+        <ellipse cx="100" cy="95" rx="73" ry="11" fill="#2a1104" class="cm-hole"/>
+        <ellipse cx="100" cy="95" rx="73" ry="11" fill="url(#cb-glow)" class="cm-inner"/>
+        <g class="cm-pile"><ellipse cx="70" cy="93" rx="14" ry="6" fill="url(#cb-g)"/><ellipse cx="100" cy="90" rx="16" ry="7" fill="url(#cb-g)"/><ellipse cx="132" cy="93" rx="14" ry="6" fill="url(#cb-g)"/><circle cx="86" cy="88" r="6" fill="#ff5d8f"/><circle cx="118" cy="87" r="5" fill="#4cc9f0"/></g>
+      </g>
+      <g class="cm-lid">
+        <path d="M20 98C20 44 180 44 180 98z" fill="url(#cb-l)"/>
+        <g clip-path="url(#cb-dome)"><rect x="35" y="40" width="17" height="64" fill="url(#cb-g)" stroke="#b97500" stroke-width="1"/><rect x="148" y="40" width="17" height="64" fill="url(#cb-g)" stroke="#b97500" stroke-width="1"/></g>
+        <path d="M44 74c10-16 32-24 56-24" stroke="#fff" stroke-opacity=".5" stroke-width="5" stroke-linecap="round" fill="none"/>
+        <rect x="18" y="90" width="164" height="14" rx="7" fill="url(#cb-g)" stroke="#b97500" stroke-width="1"/>
+        <rect x="88" y="86" width="24" height="28" rx="7" fill="url(#cb-g)" stroke="#b97500" stroke-width="1.2"/>
+        <circle cx="100" cy="97" r="4.2" fill="#6b3509"/><path d="M98 99h4l1.6 8h-7.2z" fill="#6b3509"/>
+        <g fill="#b46d00"><circle cx="43.5" cy="84" r="2.4"/><circle cx="156.5" cy="84" r="2.4"/></g>
+      </g></svg>`;
+  }
+  function lootTiles(r) {
+    const tiles = [];
+    if (r.c) tiles.push({ ic: icon('i-coin'), n: r.c, cnt: 1, lb: t('coins') });
+    if (r.h) tiles.push({ ic: `<svg class="ico" style="color:#ffb703"><use href="#i-bulb"/></svg>`, n: '+' + r.h, lb: t('hint') });
+    if (r.l) tiles.push({ ic: `<svg class="ico" style="color:#8ecbff"><use href="#i-lens"/></svg>`, n: '+' + r.l, lb: t('lens') });
+    if (r.style) tiles.push({ ic: '<span class="cm-emo">✨</span>', n: esc(styleName(r.style.kind, r.style.i)[S.set.lang] || ''), lb: t('rareLoot'), rare: 1 });
+    return tiles;
+  }
   function openChest(big, after) {
     if (!big) { if (!(S.chestReady > 0)) return; S.chestReady--; save(); }
     const r = rollChest(big);
-    modal(`<h3>${t('chest')}</h3><div class="chest-big" id="chest-big"><svg class="ico"><use href="#i-chest"/></svg><i class="rays"></i></div><p class="chest-tap">👆</p><div class="chest-loot hidden" id="chest-loot"></div>
+    modal(`<div class="cm-fx" id="cm-fx"></div><h3>${t('chest')}</h3>
+      <div class="cm-stage" id="chest-big"><i class="cm-rays"></i><i class="cm-beam"></i>${chestSvg()}</div>
+      <div class="cm-zone"><p class="cm-tap" id="cm-tap">${t('tapOpen')}</p><div class="cm-loot hidden" id="chest-loot"></div></div>
       <div class="m-actions"><button class="btn primary hidden" data-a="ok">${t('collect')}</button></div>`, {
       ok: () => { closeModal(); if (current === 'home') renderHome(); if (after) after(); if (r.style) offerTry(r.style); },
-    }, { locked: true });
+    }, { locked: true, cls: ' chestm' });
     Sound.unlock();
     const box = $('chest-big');
     let opened = false;
+    const burst = () => {
+      const fx = $('cm-fx'); if (!fx) return;
+      const cx = fx.clientWidth / 2, cy = box.offsetTop + box.offsetHeight * 0.42;
+      let h = '';
+      for (let i = 0; i < 26; i++) {
+        const ang = (-0.15 - Math.random() * 0.7) * Math.PI + (Math.random() < 0.5 ? 0 : 0);
+        const side = (i / 26) * 2 - 1;
+        const dx = side * 140 + (Math.random() - 0.5) * 40, dy = -(90 + Math.random() * 110);
+        const kind = i % 3 === 0 ? 'c' : i % 3 === 1 ? 's' : 'g';
+        h += `<b class="cm-p ${kind}" style="left:${cx}px;top:${cy}px;--dx:${dx.toFixed(0)}px;--dy:${dy.toFixed(0)}px;--rot:${(Math.random() * 720 - 360).toFixed(0)}deg;--dl:${(Math.random() * 0.18).toFixed(2)}s;--sz:${(14 + Math.random() * 12).toFixed(0)}px">${kind === 'c' ? icon('i-coin') : kind === 's' ? '✦' : '★'}</b>`;
+      }
+      fx.innerHTML = h;
+    };
     const open = () => {
       if (opened) return; opened = true;
-      box.classList.add('open'); Sound.chest(); vibrate([20, 40, 30, 40, 80]);
+      $('cm-tap').classList.add('hidden');
+      box.classList.add('shake');
+      vibrate([15, 30, 15]);
       setTimeout(() => {
-        const lines = grant(r);
-        const loot = $('chest-loot'); loot.innerHTML = `<small>${t('chestGot')}</small>` + lines.map((l, i) => `<span style="animation-delay:${i * 0.15}s">${l}</span>`).join('');
+        box.classList.remove('shake'); box.classList.add('open');
+        Sound.chest(); vibrate([20, 40, 30, 40, 80]);
+        burst();
+        const card = $('modal-card'); if (card) { card.classList.add('flash'); setTimeout(() => card.classList.remove('flash'), 700); }
+      }, 480);
+      setTimeout(() => {
+        const lines = grant(r); void lines;
+        const loot = $('chest-loot'); if (!loot) return;
+        loot.innerHTML = lootTiles(r).map((x, i) => `<div class="cm-card${x.rare ? ' rare' : ''}" style="animation-delay:${i * 0.2}s"><div class="cm-ic">${x.ic}</div><b dir="ltr"${x.cnt ? ` data-cnt="${x.n}"` : ''}>${x.cnt ? '+0' : x.n}</b><small>${x.lb}</small></div>`).join('');
         loot.classList.remove('hidden');
-        document.querySelector('#modal [data-a=ok]').classList.remove('hidden');
-        document.querySelector('#modal .chest-tap').classList.add('hidden');
-        Sound.reward();
-      }, 650);
+        loot.querySelectorAll('[data-cnt]').forEach(el => {
+          const to = +el.dataset.cnt, t0 = performance.now();
+          const step = now => { const k = Math.min(1, (now - t0) / 800); el.textContent = '+' + Math.round(to * (1 - Math.pow(1 - k, 3))); if (k < 1 && el.isConnected) requestAnimationFrame(step); };
+          setTimeout(() => requestAnimationFrame(step), 300);
+        });
+        setTimeout(() => { Sound.reward(); }, 150);
+        const ok = document.querySelector('#modal [data-a=ok]');
+        setTimeout(() => { if (ok) ok.classList.remove('hidden'); }, 250 + lootTiles(r).length * 200);
+      }, 480 + 650);
     };
     box.addEventListener('click', open);
-    setTimeout(open, 1600);
+    setTimeout(open, 2600);
   }
   function offerTry(st) {
     modal(`<h3>✨</h3><h3 style="font-size:22px">${t('newStyle')}</h3><canvas class="m-prev" id="m-prev"></canvas><p><b>${esc(styleName(st.kind, st.i)[S.set.lang] || '')}</b></p>
