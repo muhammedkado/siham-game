@@ -1041,12 +1041,12 @@
       pth(g, [[tip, 0], [tip - 0.4, -0.27], [tip - 0.3, 0], [tip - 0.4, 0.27]]); fillStroke(g, c, e, 0.05);
       g.strokeStyle = 'rgba(255,255,255,.7)'; g.lineWidth = 0.035; line(g, tip - 0.08, -0.03, tip - 0.3, -0.17);
     } },
-    { name: { ar: 'شيفرون ›››', en: 'Chevrons' }, draw(g, n, c, e) {
+    { name: { ar: 'رؤوس متتابعة ›››', en: 'Chevrons' }, draw(g, n, c, e) {
       const s0 = -0.3, tip = n - 1 + 0.38, k = n === 1 ? 2 : n * 2, step = (tip - s0) / k;
       for (let i = 0; i < k; i++) { const x = s0 + (i + 1) * step, h = i === k - 1 ? 0.36 : 0.28;
         for (const [col, w] of [[e, 0.24], [c, 0.15]]) { g.strokeStyle = col; g.lineWidth = w; g.beginPath(); g.moveTo(x - h * 0.75, -h); g.lineTo(x, 0); g.lineTo(x - h * 0.75, h); g.stroke(); } }
     } },
-    { name: { ar: 'كيوت 👀', en: 'Cuties' }, draw(g, n, c, e) {
+    { name: { ar: 'عيون ظريفة 👀', en: 'Cuties' }, draw(g, n, c, e) {
       const s0 = -0.42, tip = n - 1 + 0.46, r = 0.36;
       g.beginPath(); g.arc(s0 + r, 0, r, Math.PI / 2, Math.PI * 1.5); g.lineTo(tip - 0.32, -r); g.lineTo(tip, 0); g.lineTo(tip - 0.32, r); g.closePath();
       fillStroke(g, c, e, 0.06);
@@ -1054,18 +1054,18 @@
       const ex = tip - 0.5;
       for (const y of [-0.14, 0.14]) { g.fillStyle = '#fff'; g.beginPath(); g.arc(ex, y, 0.1, 0, 7); g.fill(); g.fillStyle = '#1d1b2e'; g.beginPath(); g.arc(ex + 0.035, y, 0.055, 0, 7); g.fill(); }
     } },
-    { name: { ar: 'نيون ✨', en: 'Neon' }, draw(g, n, c, e, lt) {
+    { name: { ar: 'وهج النيون ✨', en: 'Neon' }, draw(g, n, c, e, lt) {
       basic(g, n, 0.15, 0.38);
       g.strokeStyle = c; g.globalAlpha *= 0.25; g.lineWidth = 0.26; g.stroke(); g.globalAlpha /= 0.25;
       g.fillStyle = 'rgba(20,16,40,.82)'; g.fill();
       g.strokeStyle = c; g.lineWidth = 0.09; g.stroke();
       g.strokeStyle = lt; g.lineWidth = 0.03; g.stroke();
     } },
-    { name: { ar: 'ستيكر', en: 'Sticker' }, draw(g, n, c, e) {
+    { name: { ar: 'طوابع ملونة', en: 'Sticker' }, draw(g, n, c, e) {
       g.save(); g.translate(0.04, 0.07); basic(g, n, 0.2, 0.42); g.fillStyle = g.strokeStyle = 'rgba(30,20,50,.22)'; g.lineWidth = 0.2; g.fill(); g.stroke(); g.restore();
       basic(g, n, 0.2, 0.42); g.strokeStyle = '#fff'; g.lineWidth = 0.18; g.stroke(); g.fillStyle = c; g.fill();
     } },
-    { name: { ar: 'بكسل 8-بت 👾', en: '8-bit' }, draw(g, n, c, e, lt) {
+    { name: { ar: 'بكسل كلاسيكي 👾', en: '8-bit' }, draw(g, n, c, e, lt) {
       const u = 0.16, s0 = -0.4, tip = n - 1 + 0.48, hb = tip - 3 * u;
       const rects = [[s0, -u, hb - s0, 2 * u]];
       for (let j = 0; j < 3; j++) rects.push([hb + j * u, -(3 - j) * u, u, 2 * (3 - j) * u]);
@@ -1073,13 +1073,13 @@
       g.fillStyle = c; for (const [x, y, w, h] of rects) g.fillRect(x, y, w, h);
       g.fillStyle = lt; for (const [x, y, w] of rects) g.fillRect(x, y, w, 0.05);
     } },
-    { name: { ar: 'طيارة ورق ✈️', en: 'Paper plane' }, draw(g, n, c, e, lt) {
+    { name: { ar: 'طائرة ورقية ✈️', en: 'Paper plane' }, draw(g, n, c, e, lt) {
       const s0 = -0.44, tip = n - 1 + 0.47;
       pth(g, [[tip, 0], [s0, -0.38], [s0 + 0.22, 0], [s0, 0.38]]); fillStroke(g, c, e, 0.05);
       pth(g, [[tip, 0], [s0, -0.38], [s0 + 0.22, 0]]); g.fillStyle = lt; g.fill();
       g.strokeStyle = e; g.lineWidth = 0.035; line(g, s0 + 0.22, 0, tip - 0.04, 0);
     } },
-    { name: { ar: 'عصا سكاكر 🍬', en: 'Candy cane' }, draw(g, n, c, e) {
+    { name: { ar: 'عصا السكاكر 🍬', en: 'Candy cane' }, draw(g, n, c, e) {
       basic(g, n, 0.22, 0.44); g.fillStyle = c; g.fill();
       g.save(); g.clip(); g.strokeStyle = 'rgba(255,255,255,.6)'; g.lineWidth = 0.1;
       for (let x = -1; x < n + 0.6; x += 0.3) line(g, x, 0.5, x + 0.45, -0.5);
@@ -1113,19 +1113,19 @@
   const hsl = (h, s, l) => 'hsl(' + Math.round(h) + ',' + s + '%,' + l + '%)';
   const fix = c => ({ b: c, e: edgeOf(c), h: lightOf(c) });
   const TRAILS = [
-    { name: { ar: 'حبر كلاسيك', en: 'Classic ink' }, sw: ['#1f2544'] },
-    { name: { ar: 'حلوى ملوّنة', en: 'Candy tubes' }, sw: CANDY.slice(0, 4), col: id => fix(CANDY[(id * 5) % CANDY.length]) },
-    { name: { ar: 'جليد', en: 'Ice' }, sw: ['#9bdcff', '#cdeffd', '#3a86c8'], col: id => (id % 3 ? { b: '#8fd3ff', e: '#2f78c4', h: '#ffffff' } : { b: '#bfe9ff', e: '#3a86c8', h: '#ffffff' }) },
-    { name: { ar: 'نيون', en: 'Neon' }, glow: true, sw: ['#ff2bd6', '#00e5ff', '#b3ff00'], col: id => { const c = ['#ff2bd6', '#00e5ff', '#b3ff00', '#ffd400'][id % 4]; return { b: c, e: '#1b1035', h: '#ffffff' }; } },
-    { anim: true, name: { ar: 'ذهب', en: 'Gold' }, sw: ['#f5b700', '#fff1a8', '#8a5a00'], col: (id, t) => ({ b: (Math.floor(t * 2 + id * 0.37) % 7) === 0 ? '#ffd84d' : '#f5b700', e: '#8a5a00', h: '#fff6c2' }) },
+    { name: { ar: 'حبر كلاسيكي', en: 'Classic ink' }, sw: ['#1f2544'] },
+    { name: { ar: 'أنابيب حلوى ملونة', en: 'Candy tubes' }, sw: CANDY.slice(0, 4), col: id => fix(CANDY[(id * 5) % CANDY.length]) },
+    { name: { ar: 'جليد ناصع', en: 'Ice' }, sw: ['#9bdcff', '#cdeffd', '#3a86c8'], col: id => (id % 3 ? { b: '#8fd3ff', e: '#2f78c4', h: '#ffffff' } : { b: '#bfe9ff', e: '#3a86c8', h: '#ffffff' }) },
+    { name: { ar: 'أطياف النيون', en: 'Neon' }, glow: true, sw: ['#ff2bd6', '#00e5ff', '#b3ff00'], col: id => { const c = ['#ff2bd6', '#00e5ff', '#b3ff00', '#ffd400'][id % 4]; return { b: c, e: '#1b1035', h: '#ffffff' }; } },
+    { anim: true, name: { ar: 'بريق الذهب', en: 'Gold' }, sw: ['#f5b700', '#fff1a8', '#8a5a00'], col: (id, t) => ({ b: (Math.floor(t * 2 + id * 0.37) % 7) === 0 ? '#ffd84d' : '#f5b700', e: '#8a5a00', h: '#fff6c2' }) },
     { anim: true, name: { ar: 'حمم بركانية 🌋', en: 'Lava' }, glow: true, sw: ['#ff5400', '#ffd166', '#7a1500'], col: (id, t) => { const k = Math.floor(t * 6 + id * 1.7) % 3; return { b: ['#ff5400', '#ff7b00', '#ff3d00'][k], e: '#7a1500', h: '#ffd166' }; } },
     { anim: true, name: { ar: 'قوس قزح 🌈', en: 'Rainbow' }, sw: ['#ff4d4d', '#ffd400', '#2ecc71', '#3a86ff', '#9b5de5'], col: (id, t) => { const h = (Math.round(((id * 47 + t * 60) % 360) / 15) * 15); return { b: hsl(h, 90, 58), e: hsl(h, 70, 32), h: hsl(h, 100, 86) }; } },
-    { anim: true, name: { ar: 'مجرّة 🌌', en: 'Galaxy' }, glow: true, sw: ['#7b2ff7', '#f107a3', '#1a0b3d'], col: (id, t) => { const h = 260 + 50 * Math.sin(t * 1.5 + id); const hq = Math.round(h / 10) * 10; return { b: hsl(hq, 85, 55), e: '#160a33', h: '#f5e1ff' }; } },
+    { anim: true, name: { ar: 'سديم المجرة 🌌', en: 'Galaxy' }, glow: true, sw: ['#7b2ff7', '#f107a3', '#1a0b3d'], col: (id, t) => { const h = 260 + 50 * Math.sin(t * 1.5 + id); const hq = Math.round(h / 10) * 10; return { b: hsl(hq, 85, 55), e: '#160a33', h: '#f5e1ff' }; } },
     // ——— حصرية للميداليات (لا تُشترى) ———
-    { anim: true, medal: true, glow: true, name: { ar: 'ألماس 💎', en: 'Diamond 💎' }, sw: ['#c9f3ff', '#ffffff', '#2f86c0'], col: (id, t) => ((Math.floor(t * 3 + id * 0.53) % 9) === 0 ? { b: '#ffffff', e: '#3aa0d8', h: '#ffffff' } : { b: id % 2 ? '#a8e8ff' : '#c9f3ff', e: '#2f86c0', h: '#ffffff' }) },
-    { anim: true, medal: true, glow: true, name: { ar: 'شفق 🌠', en: 'Aurora 🌠' }, sw: ['#2bffb1', '#4cc9f0', '#b388ff'], col: (id, t) => { const h = Math.round((170 + 75 * Math.sin(t * 1.2 + id * 0.45)) / 10) * 10; return { b: hsl(h, 85, 58), e: hsl(h, 70, 24), h: hsl(h, 100, 88) }; } },
-    { anim: true, medal: true, name: { ar: 'ملكي 👑', en: 'Royal 👑' }, sw: ['#7b35a8', '#f5b700', '#2b0f40'], col: (id, t) => ((id + Math.floor(t * 1.5)) % 3 === 0 ? { b: '#f5b700', e: '#7a4a00', h: '#fff1a8' } : { b: '#7b35a8', e: '#2b0f40', h: '#e6c8ff' }) },
-    { anim: true, medal: true, glow: true, name: { ar: 'أسطوري 🔱', en: 'Legendary 🔱' }, sw: ['#00e5ff', '#ff3d7f', '#ffd166'], col: (id, t) => { const h = [190, 330, 45][Math.floor((t * 0.8 + id * 0.21) % 3)]; return { b: hsl(h, 95, 58), e: hsl(h, 80, 26), h: '#ffffff' }; } },
+    { anim: true, medal: true, glow: true, name: { ar: 'ألماس نقي 💎', en: 'Diamond 💎' }, sw: ['#c9f3ff', '#ffffff', '#2f86c0'], col: (id, t) => ((Math.floor(t * 3 + id * 0.53) % 9) === 0 ? { b: '#ffffff', e: '#3aa0d8', h: '#ffffff' } : { b: id % 2 ? '#a8e8ff' : '#c9f3ff', e: '#2f86c0', h: '#ffffff' }) },
+    { anim: true, medal: true, glow: true, name: { ar: 'شفق قطبي 🌠', en: 'Aurora 🌠' }, sw: ['#2bffb1', '#4cc9f0', '#b388ff'], col: (id, t) => { const h = Math.round((170 + 75 * Math.sin(t * 1.2 + id * 0.45)) / 10) * 10; return { b: hsl(h, 85, 58), e: hsl(h, 70, 24), h: hsl(h, 100, 88) }; } },
+    { anim: true, medal: true, name: { ar: 'تاج ملكي 👑', en: 'Royal 👑' }, sw: ['#7b35a8', '#f5b700', '#2b0f40'], col: (id, t) => ((id + Math.floor(t * 1.5)) % 3 === 0 ? { b: '#f5b700', e: '#7a4a00', h: '#fff1a8' } : { b: '#7b35a8', e: '#2b0f40', h: '#e6c8ff' }) },
+    { anim: true, medal: true, glow: true, name: { ar: 'سهم أسطوري 🔱', en: 'Legendary 🔱' }, sw: ['#00e5ff', '#ff3d7f', '#ffd166'], col: (id, t) => { const h = [190, 330, 45][Math.floor((t * 0.8 + id * 0.21) % 3)]; return { b: hsl(h, 95, 58), e: hsl(h, 80, 26), h: '#ffffff' }; } },
   ];
   root.ArrowTrails = TRAILS.map(k => ({ name: k.name, sw: k.sw }));
 
