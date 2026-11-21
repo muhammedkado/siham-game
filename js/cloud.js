@@ -14,8 +14,8 @@
   try { firebase.initializeApp(CFG); auth = firebase.auth(); } catch (e) { auth = null; }
 
   // ——— Firestore عبر REST (أخف بكثير من مكتبة Firestore الكاملة) ———
-  const enc = v => typeof v === 'number' ? { integerValue: String(Math.round(v)) } : { stringValue: String(v) };
-  const dec = f => { const o = {}; for (const k in f || {}) { const x = f[k]; o[k] = 'integerValue' in x ? +x.integerValue : 'doubleValue' in x ? +x.doubleValue : x.stringValue; } return o; };
+  const enc = v => typeof v === 'number' ? { integerValue: String(Math.round(v)) } : v && typeof v === 'object' ? { mapValue: { fields: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, enc(x)])) } } : { stringValue: String(v) };
+  const dec = f => { const o = {}; for (const k in f || {}) { const x = f[k]; o[k] = 'integerValue' in x ? +x.integerValue : 'doubleValue' in x ? +x.doubleValue : 'mapValue' in x ? dec(x.mapValue.fields) : x.stringValue; } return o; };
   async function req(method, path, body, tk) {
     const h = { 'Content-Type': 'application/json' };
     if (tk === undefined && user) tk = await user.getIdToken().catch(() => null);
@@ -115,6 +115,12 @@
     async top(kind, n) {
       const [par, col, f] = coll(kind);
       return rows(await req('POST', par + ':runQuery', { structuredQuery: { from: [{ collectionId: col }], orderBy: [{ field: { fieldPath: f }, direction: kind === 'day' ? 'ASCENDING' : 'DESCENDING' }], limit: n || 50 } }));
+    },
+    /** عدد صفوف لوحة "الكل" التي تحقق شرطاً (لنسبة ندرة الميداليات) */
+    async count(field, op, val) {
+      const r = await req('POST', ':runAggregationQuery', { structuredAggregationQuery: { structuredQuery: { from: [{ collectionId: 'board' }], where: { fieldFilter: { field: { fieldPath: field }, op, value: enc(val) } } }, aggregations: [{ alias: 'c', count: {} }] } });
+      const a = r && r[0] && r[0].result && r[0].result.aggregateFields;
+      return a && a.c ? +a.c.integerValue : 0;
     },
     /** ترتيبي = عدد من هم أفضل مني + 1 */
     async rank(kind, val) {

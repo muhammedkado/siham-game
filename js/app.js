@@ -1020,6 +1020,59 @@
     const locked = !tier, col = locked ? '#9aa0b4' : MD_COL[m.id] || '#888';
     return `<div class="md-medal" style="--rbc:${col}"><i class="rb l"></i><i class="rb r"></i>${medalDisc(m, tier || 1, 'big', locked)}</div>`;
   }
+  // ——— الميداليات في لوحة الصدارة ———
+  /** ما يُنشر: m = {id: درجة} للميداليات المحققة فقط، f = رقم الميدالية المعروضة (-1 لا شيء) */
+  function medalPub() {
+    const m = {};
+    MEDALS.forEach(x => { if (S.med[x.id]) m[x.id] = S.med[x.id]; });
+    return { m, f: showIdx(m) };
+  }
+  const medTier = (x, lv) => x.tiers ? lv : lv ? (x.legend ? 5 : 4) : 0;
+  function showIdx(m) {
+    const pick = S.prof.f;
+    if (pick != null && pick >= 0 && MEDALS[pick] && m[MEDALS[pick].id]) return pick;
+    let best = -1, br = 0;
+    MEDALS.forEach((x, i) => { const r = tierRank(medTier(x, m[x.id] || 0)); if (r > br) { br = r; best = i; } });
+    return best;
+  }
+  function rkMedal(r) {
+    const m = r && r.m; if (!m || typeof m !== 'object') return '';
+    const n = Object.keys(m).filter(k => MEDALS.some(x => x.id === k)).length; if (!n) return '';
+    const x = MEDALS[r.f] && m[MEDALS[r.f].id] ? MEDALS[r.f] : null;
+    return `<span class="rk-md">${x ? `<span class="md-disc xs">${medalSvg(x, medTier(x, m[x.id]), false)}</span>` : ''}<i dir="ltr">${n}</i></span>`;
+  }
+  /** خزانة لاعب من لوحة الصدارة */
+  function playerCard(r) {
+    const m = (r.m && typeof r.m === 'object') ? r.m : {};
+    const n = MEDALS.filter(x => m[x.id]).length;
+    const cells = MEDALS.map((x, i) => {
+      const lv = m[x.id] || 0, tr = medTier(x, lv);
+      return `<span class="pc-md${i === r.f && lv ? ' fav' : ''}" title="${esc(lv || !x.secret ? mName(x) : t('medalSecret'))}"><span class="md-disc sm${tr ? '' : ' lockd'}">${medalSvg(x, tr || (x.legend ? 5 : x.secret ? 4 : 1), !tr, { nolock: 1 })}</span>${tr ? `<i class="t${tr}"></i>` : ''}</span>`;
+    }).join('');
+    const golds = MEDALS.filter(x => x.tiers && m[x.id] >= 3).length;
+    modal(`<div class="pc-head"><span class="rk-av big">${av(r.a)}</span><h3>${esc(r.n || t('player'))}</h3>${r.l ? `<small>${t('level')} ${r.l}</small>` : ''}</div>
+      <div class="pc-sum"><span><b dir="ltr">${n}</b> / ${MEDALS.length} ${t('medals')}</span>${golds ? `<span><span class="md-disc xs">${medalSvg({}, 3, false, { col: '#e0a100', g: 'perfect' })}</span><b dir="ltr">${golds}</b></span>` : ''}</div>
+      ${n || r.m ? `<div class="pc-grid">${cells}</div>` : `<p class="sub">${t('noMedals')}</p>`}
+      <div class="m-actions"><button class="btn primary" data-a="ok">${t('ok')}</button></div>`, { ok: closeModal }, { cls: ' pcard' });
+  }
+  /** نسبة اللاعبين اللي معهم ميدالية بدرجة معينة (من لوحة "الكل")، مع ذاكرة ساعة */
+  const rarCache = {};
+  async function medalRarity(x, lv) {
+    if (!window.Cloud || !Cloud.ok || navigator.onLine === false) return null;
+    const key = x.id + lv, now = Date.now();
+    if (rarCache[key] && now - rarCache[key].at < 3600e3) return rarCache[key].p;
+    if (!rarCache.den || now - rarCache.den.at > 3600e3) rarCache.den = { at: now, p: await Cloud.count('f', 'GREATER_THAN_OR_EQUAL', -1) };
+    const den = rarCache.den.p; if (!den) return null;
+    const own = await Cloud.count('m.' + x.id, 'GREATER_THAN_OR_EQUAL', lv);
+    const p = Math.min(100, 100 * own / den);
+    rarCache[key] = { at: now, p };
+    return p;
+  }
+  const fmtPct = p => p == null ? '' : (p < 1 ? (p === 0 ? '0' : '<1') : p < 10 ? p.toFixed(1).replace(/\.0$/, '') : Math.round(p)) + '%';
+  function fillRarity(el, x, lv) {
+    if (!el) return;
+    medalRarity(x, lv).then(p => { if (p == null || !el.isConnected) return; el.innerHTML = `🌍 ${t('rarity').replace('{p}', `<b dir="ltr">${fmtPct(p)}</b>`)}`; el.classList.add('on'); }).catch(() => {});
+  }
   /** يحدّث العدّادات بعد الفوز */
   function medalWin(ms) {
     if (G.mode === 'zen' || G.mode === 'gift') return;
@@ -1090,11 +1143,13 @@
       <span class="md-tier t${top.tier}">${tierName(top.tier)}</span>
       <h3 class="md-name">${mName(top.m)}</h3>
       <p class="md-desc">${mDesc(top.m)}${top.m.tiers || top.m.goal > 1 ? ` · <b dir="ltr">${need}</b>` : ''}</p>
+      <p class="md-rar" id="md-rar"></p>
       ${rest.length ? `<div class="md-more">${rest.map(x => `<span title="${esc(mName(x.m))}">${medalDisc(x.m, x.tier, 'sm')}</span>`).join('')}</div>` : ''}
       <div class="md-rew">${coins ? `<span>${icon('i-coin')}<b dir="ltr">+${coins}</b></span>` : ''}${chests ? `<span>${icon('i-chest')}<b dir="ltr">+${chests}</b></span>` : ''}${trails.map(x => `<span class="rare">✨ ${esc(styleName('trail', x.trail)[S.set.lang] || '')}</span>`).join('')}</div>
       <div class="m-actions"><button class="btn primary" data-a="ok">${t('medalCont')}</button></div>`,
     { ok: () => { closeModal(); coinUI(); if (current === 'home') renderHome(); if (after) after(); } }, { locked: true, cls: ' chestm medalm' });
     Sound.unlock(); setTimeout(() => Sound.chest(), 250); setTimeout(() => Sound.reward(), 900);
+    if (cloudOn) { cloudPush().then(() => fillRarity($('md-rar'), top.m, top.m.tiers ? top.tier : 1)); }
     vibrate([20, 40, 30, 40, 80]);
     setTimeout(() => {
       const fx = $('cm-fx'), st = $('md-stage'); if (!fx || !st) return;
@@ -1159,13 +1214,20 @@
     const rewards = ['', `${icon('i-coin')} 50`, `${icon('i-coin')} 150 + ${icon('i-chest')}`, `${icon('i-coin')} 400 + ✨`];
     let rows = '';
     if (m.tiers) {
-      rows = `<div class="md-rows">${tiersOf(m).map((x, k) => `<div class="${e > k ? 'on' : ''}">${medalDisc(m, k + 1, 'xs')}<span>${tierName(k + 1)}</span><b dir="ltr">${x}</b><small>${rewards[k + 1]}</small>${e > k ? '<em>✓</em>' : ''}</div>`).join('')}</div>`;
+      rows = `<div class="md-rows">${tiersOf(m).map((x, k) => `<div class="${e > k ? 'on' : ''}">${medalDisc(m, k + 1, 'xs')}<span>${tierName(k + 1)}<em class="rar" dir="ltr" data-rt="${k + 1}"></em></span><b dir="ltr">${x}</b><small>${rewards[k + 1]}</small>${e > k ? '<em>✓</em>' : ''}</div>`).join('')}</div>`;
       const v = m.v();
       rows += `<p class="md-now">${m.cur ? `${t('medalNow')}: <b dir="ltr">${m.cur()}</b> · ${t('medalBest')}: <b dir="ltr">${v}</b>` : `${t('medalNow')}: <b dir="ltr">${v}</b>`}</p>`;
     } else {
       rows = `<div class="md-rows"><div class="${e ? 'on' : ''}">${medalDisc(m, m.legend ? 5 : 4, 'xs')}<span>${tierName(m.legend ? 5 : 4)}</span><b dir="ltr">${Math.min(m.goal, m.v())}/${m.goal}</b><small>${m.legend ? `${icon('i-coin')} 1000 + ✨` : rewards[2]}</small>${e ? '<em>✓</em>' : ''}</div></div>`;
     }
-    modal(`${medalMedal(m, m.tiers ? e : e ? (m.legend ? 5 : 4) : 0)}<h3>${mName(m)}</h3><p class="md-desc">${mDesc(m)}</p>${rows}<div class="m-actions"><button class="btn primary" data-a="ok">${t('ok')}</button></div>`, { ok: closeModal }, { cls: ' mdinfo' });
+    const idx = MEDALS.indexOf(m), shown = e && showIdx(medalPub().m) === idx;
+    const showBtn = e ? `<button class="btn${shown ? ' on' : ''}" data-a="show" ${shown ? 'disabled' : ''}>${shown ? '✓ ' + t('showcased') : '📌 ' + t('showcase')}</button>` : '';
+    modal(`${medalMedal(m, m.tiers ? e : e ? (m.legend ? 5 : 4) : 0)}<h3>${mName(m)}</h3><p class="md-desc">${mDesc(m)}</p><p class="md-rar" id="md-rar"></p>${rows}<div class="m-actions"><button class="btn primary" data-a="ok">${t('ok')}</button>${showBtn}</div>`, {
+      ok: closeModal,
+      show: () => { S.prof.f = idx; S.prof.t = Date.now(); save(); toast('📌 ' + t('showcased')); medalInfo(m); },
+    }, { cls: ' mdinfo' });
+    if (e) fillRarity($('md-rar'), m, m.tiers ? e : 1);
+    document.querySelectorAll('#modal .rar[data-rt]').forEach(el => medalRarity(m, +el.dataset.rt).then(p => { if (p != null && el.isConnected) el.textContent = fmtPct(p); }).catch(() => {}));
   }
 
   function offerTry(st, after) {
@@ -1277,20 +1339,23 @@
     o.prof = ((b.prof && b.prof.t) || 0) > ((a.prof && a.prof.t) || 0) ? b.prof : a.prof;
     return o;
   }
-  let lastPub = '', pushing = null;
+  let lastPub = '', pushing = null, mdRulesOk = true;
   function cloudPush() {
     if (!CU() || navigator.onLine === false) return Promise.resolve();
     if (pushing) return pushing.then(() => cloudPush());
     const data = {}; for (const k in S) if (!SKIP[k]) data[k] = S[k];
     const who = { n: myName(), a: S.prof.a % AVATARS.length }, td = today(), dr = S.rec['d' + td], sc = totalScore();
-    const pub = JSON.stringify([who, sc, S.level, S.wk, dr && dr.t]);
+    const md = medalPub();
+    const pub = JSON.stringify([who, sc, S.level, S.wk, dr && dr.t, md]);
     pushing = (async () => {
       await Cloud.save(JSON.stringify(data));
       if (pub !== lastPub) {
         const jobs = [];
-        if (sc > 0) jobs.push(Cloud.board(Object.assign({ s: sc, l: S.level }, who)));
-        if (S.wk && S.wk.id === Cloud.weekId() && S.wk.s > 0) jobs.push(Cloud.week(Object.assign({ s: S.wk.s }, who)));
-        if (dr && dr.t >= 3000) jobs.push(Cloud.day(Object.assign({ t: Math.round(dr.t) }, who)));
+        // الميداليات مع الصف العام؛ إذا القواعد القديمة رفضتها نرسل بدونها (وما نعيد المحاولة بهالجلسة)
+        const pubRow = (fn, row) => jobs.push((mdRulesOk ? fn(Object.assign({}, row, md)) : Promise.reject(0)).catch(() => { mdRulesOk = false; return fn(row); }));
+        if (sc > 0) pubRow(Cloud.board, Object.assign({ s: sc, l: S.level }, who));
+        if (S.wk && S.wk.id === Cloud.weekId() && S.wk.s > 0) pubRow(Cloud.week, Object.assign({ s: S.wk.s }, who));
+        if (dr && dr.t >= 3000) pubRow(Cloud.day, Object.assign({ t: Math.round(dr.t) }, who));
         await Promise.all(jobs);
         lastPub = pub;
         for (const k in rkCache) delete rkCache[k];
@@ -1425,14 +1490,16 @@
       const rows = rkCache[tab].rows, u = CU(), uid = u && u.uid;
       const val = r => tab === 'day' ? fmtT(r.t) : r.s.toLocaleString('en');
       const medal = i => i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1;
-      list.innerHTML = rows.length ? rows.map((r, i) => `<div class="rk-row ${r.id === uid ? 'me' : ''} ${i < 3 ? 'top' : ''}"><span class="rk-n">${medal(i)}</span><span class="rk-av">${av(r.a)}</span><b class="rk-name">${esc(r.n)}</b><span class="rk-v">${val(r)}</span></div>`).join('')
+      list.innerHTML = rows.length ? rows.map((r, i) => `<div class="rk-row ${r.id === uid ? 'me' : ''} ${i < 3 ? 'top' : ''}" data-rk="${i}"><span class="rk-n">${medal(i)}</span><span class="rk-av">${av(r.a)}</span><b class="rk-name">${esc(r.n)}</b>${rkMedal(r.id === uid ? medalPub() : r)}<span class="rk-v">${val(r)}</span></div>`).join('')
         : `<p class="rk-empty">🏆<br>${t('rkEmpty')}</p>`;
+      list.querySelectorAll('[data-rk]').forEach(el => el.addEventListener('click', () => { const r = rows[+el.dataset.rk]; Sound.click(); playerCard(r.id === uid ? Object.assign({}, r, medalPub(), { n: myName(), a: S.prof.a }) : r); }));
       const mine = tab === 'all' ? totalScore() : tab === 'week' ? (S.wk && S.wk.id === Cloud.weekId() ? S.wk.s : 0) : (S.rec['d' + today()] || {}).t;
       const inTop = rows.findIndex(r => r.id === uid);
       if (!mine) { me.innerHTML = `<div class="rk-row me"><span class="rk-n">–</span><span class="rk-av">${av(S.prof.a)}</span><b class="rk-name">${esc(myName())}</b><span class="rk-v small">${tab === 'day' ? t('rkPlayDaily') : t('rkPlay')}</span></div>`; return; }
       const pos = inTop >= 0 ? inTop + 1 : await Cloud.rank(tab, mine);
       if (tab !== rkTab) return;
-      me.innerHTML = `<div class="rk-row me"><span class="rk-n">${pos}</span><span class="rk-av">${av(S.prof.a)}</span><b class="rk-name">${esc(myName())} <small>(${t('rkYou')})</small></b><span class="rk-v">${tab === 'day' ? fmtT(mine) : mine.toLocaleString('en')}</span></div>`;
+      me.innerHTML = `<div class="rk-row me" data-me="1"><span class="rk-n">${pos}</span><span class="rk-av">${av(S.prof.a)}</span><b class="rk-name">${esc(myName())} <small>(${t('rkYou')})</small></b>${rkMedal(medalPub())}<span class="rk-v">${tab === 'day' ? fmtT(mine) : mine.toLocaleString('en')}</span></div>`;
+      me.querySelector('[data-me]').addEventListener('click', () => { Sound.click(); playerCard(Object.assign({ n: myName(), a: S.prof.a, l: S.level }, medalPub())); });
     } catch (e) {
       console.warn('ranks', e.message);
       if (!rkCache[tab]) list.innerHTML = `<p class="rk-empty">📡<br>${t('rkOffline')}</p>`;

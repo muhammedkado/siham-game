@@ -714,3 +714,28 @@ body[data-theme="night"] .md-card.got.t3,body[data-theme="dark"] .md-card.got.t3
 .md-sum>span{padding:4px 12px 4px 6px}
 .md-sum .md-disc.xs{width:26px;height:26px}
 .md-card.legend .md-ring{flex:none}
+
+/* ——— v3.6: الميداليات في الصدارة ——— */
+.rk-row[data-rk],.rk-row[data-me]{cursor:pointer}
+.rk-md{display:inline-flex;align-items:center;gap:3px;flex:none;background:var(--cell);border-radius:999px;padding:2px 8px 2px 3px}
+.rk-md .md-disc.xs{width:24px;height:24px}
+.rk-md i{font-style:normal;font-weight:800;font-size:12px;color:var(--sub)}
+.pcard .pc-head{display:flex;flex-direction:column;align-items:center;gap:4px}
+.pcard .pc-head h3{margin:2px 0 0}
+.pcard .pc-head small{color:var(--sub);font-weight:700}
+.rk-av.big{width:64px;height:64px;font-size:38px}
+.pc-sum{display:flex;justify-content:center;gap:8px;margin:10px 0}
+.pc-sum>span{display:inline-flex;align-items:center;gap:5px;background:var(--cell);border-radius:999px;padding:4px 12px;font-weight:700;color:var(--sub)}
+.pc-sum b{color:var(--ink)}
+.pc-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px 4px;margin:4px 0 12px;justify-items:center}
+.pc-md{position:relative;display:grid;place-items:center;padding:3px;border-radius:50%}
+.pc-md.fav{background:radial-gradient(circle,rgba(255,209,102,.55),transparent 70%)}
+.pc-md .md-disc.sm{width:46px;height:46px}
+.pc-md .md-disc.lockd{opacity:.45}
+.pc-md i{position:absolute;bottom:-2px;width:10px;height:10px;border-radius:50%;border:2px solid var(--card)}
+.pc-md i.t1{background:#c27a3a}.pc-md i.t2{background:#aeb8c8}.pc-md i.t3{background:#f2b400}.pc-md i.t4{background:#8b5cf6}.pc-md i.t5{background:linear-gradient(90deg,#7df9ff,#c77dff,#ff7ad9)}
+.md-rar{min-height:0;margin:0;font-size:13px;font-weight:700;color:var(--sub);opacity:0;transition:opacity .4s}
+.md-rar.on{opacity:1;margin:-4px 0 8px}
+.medalm .md-rar{color:#ffe9a8}
+.md-rows .rar{font-style:normal;font-size:11px;font-weight:700;color:var(--sub);margin-inline-start:6px;opacity:.85}
+.mdinfo .m-actions .btn.on{opacity:.75}

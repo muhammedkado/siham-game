@@ -123,6 +123,7 @@
       medalOnly: 'ميدالية', medalDone: 'مكتملة', medalBest: 'الأفضل', medalNow: 'الحالي', legendTitle: 'أسطورة',
       medalTiers: ['برونزية', 'فضية', 'ذهبية', 'سرية', 'أسطورية'],
       medalTiersAl: ['البرونزية', 'الفضية', 'الذهبية', 'السرية', 'الأسطورية'],
+      showcase: 'اعرضها في الصدارة', showcased: 'معروضة في الصدارة', noMedals: 'لا ميداليات بعد', rarity: 'يملكها {p} من اللاعبين',
       md: {
         flaw: ['إتقان تام', 'الفوز في مراحل متتالية دون ارتكاب أي خطأ (مراحل تحوي 30 سهماً فأكثر)'],
         sniper: ['القنّاص البارع', 'إطلاق أسهم متتالية بنجاح دون أي خطأ في مرحلة واحدة'],
@@ -286,6 +287,7 @@
       medalOnly: 'Medal', medalDone: 'Complete', medalBest: 'Best', medalNow: 'Now', legendTitle: 'Legend',
       medalTiers: ['Bronze', 'Silver', 'Gold', 'Secret', 'Legendary'],
       medalTiersAl: ['Bronze', 'Silver', 'Gold', 'Secret', 'Legendary'],
+      showcase: 'Show on leaderboard', showcased: 'Shown on leaderboard', noMedals: 'No medals yet', rarity: '{p} of players have it',
       md: {
         flaw: ['Flawless', 'Levels in a row without a single mistake (30+ arrows)'],
         sniper: ['Sniper', 'Arrows in a row without a mistake in one level'],
