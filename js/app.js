@@ -8,7 +8,7 @@
   const DEFAULT = {
     level: 1, stars: {}, hints: 3, lenses: 3, pics: {}, pack: {}, gifts: [], ad: { wins: 0, last: 0 },
     daily: { last: null, streak: 0 },
-    set: { theme: 'light', sound: true, music: true, vibe: true, lang: 'ar', safe: true },
+    set: { theme: 'light', sound: true, music: true, vibe: true, lang: 'ar', safe: false },
     seen: {},
     // اقتصاد اللعبة: عملات + ستايلات أسهم + صندوق كنز + هدية يومية
     coins: 50, own: { trail: [0, 1], skin: [0] }, eq: { trail: 1, skin: 0 }, chest: 0, chestReady: 0,
@@ -21,6 +21,9 @@
   const fresh = () => JSON.parse(JSON.stringify(DEFAULT));
   let S;
   try { S = Object.assign(fresh(), JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { S = fresh(); }
+  // v3.2: «حماية اللمس الذكي» صارت مغلقة افتراضياً — مرة واحدة فقط للاعبين الحاليين (بعدها اختيارهم محفوظ)
+  if (!S.seen) S.seen = {};
+  if (!S.seen.safeOff) { S.seen.safeOff = 1; S.set = Object.assign({}, S.set, { safe: false }); }
   S.set = Object.assign({}, DEFAULT.set, S.set);
   S.daily = Object.assign({}, DEFAULT.daily, S.daily);
   S.own = Object.assign(fresh().own, S.own); S.eq = Object.assign(fresh().eq, S.eq); S.login = Object.assign(fresh().login, S.login);
@@ -314,6 +317,7 @@
       hideCoach(); hideNudge();
       idleArm();
       streakFx(left, total);
+      if (left === 0) engine.fit(true);   // آخر سهم: رجّع الزوم لوضعه الطبيعي
     },
     onMistake(hearts) {
       Sound.bump(); vibrate([40, 30, 60]);
@@ -633,6 +637,7 @@
 
   function onWin() {
     Music.stop(); idleStop(); engine.calm();
+    if (engine.zoomed) engine.fit(true);
     Sound.win(); vibrate([20, 40, 20, 40, 60]);
     const stars = G.mode === 'zen' ? 3 : G.usedChance ? 1 : Math.max(1, 3 - engine.mistakes);
     if (G.mode !== 'pack' && G.mode !== 'gift') S.pics[G.level.pic] = 1;
