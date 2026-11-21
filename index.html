@@ -32,6 +32,7 @@
     <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12.6" r="10" fill="#d98a00"/><circle cx="12" cy="11.4" r="10" fill="#ffc531"/><circle cx="12" cy="11.4" r="7" fill="#ffd95e" stroke="#e8a200" stroke-width="1.4"/><path d="M9.2 13.6l2.8-5 2.8 5h-1.9v2h-1.8v-2z" fill="#e39500"/><ellipse cx="8.6" cy="7.4" rx="2.4" ry="1.2" fill="#fff6c9" opacity=".8" transform="rotate(-30 8.6 7.4)"/></symbol>
     <symbol id="i-shop" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h16l-1.2 10.2a2 2 0 0 1-2 1.8H7.2a2 2 0 0 1-2-1.8z"/><path d="M8.5 9V7a3.5 3.5 0 0 1 7 0v2"/></g></symbol>
     <symbol id="i-chest" viewBox="0 0 24 24"><defs><linearGradient id="ic-b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c97a2b"/><stop offset="1" stop-color="#8a4a14"/></linearGradient><linearGradient id="ic-l" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0a74a"/><stop offset="1" stop-color="#c8742a"/></linearGradient><linearGradient id="ic-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff3a8"/><stop offset="1" stop-color="#ffb800"/></linearGradient></defs><path d="M2.5 11h19v8.2a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2z" fill="url(#ic-b)"/><path d="M2.5 11a6 6 0 0 1 6-6h7a6 6 0 0 1 6 6z" fill="url(#ic-l)"/><path d="M2.5 10.4h19v2.6h-19z" fill="url(#ic-g)"/><path d="M6.6 5.2v15.8M17.4 5.2v15.8" stroke="url(#ic-g)" stroke-width="2.2"/><rect x="9.8" y="9.6" width="4.4" height="6" rx="1.3" fill="url(#ic-g)" stroke="#8a4b10" stroke-width=".8"/><circle cx="12" cy="12" r=".9" fill="#7a3d08"/><path d="M6 7.2c1.2-1.4 2.6-1.9 4-2" stroke="#fff" stroke-opacity=".55" stroke-width="1.1" stroke-linecap="round" fill="none"/></symbol>
+    <symbol id="i-medal" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 2.5l3 6.5M15.5 2.5l-3 6.5"/><circle cx="12" cy="15" r="6.2"/><path d="M12 11.8l1 2 2.2.3-1.6 1.5.4 2.2-2-1.1-2 1.1.4-2.2-1.6-1.5 2.2-.3z" fill="currentColor" stroke-width="1"/></g></symbol>
   </defs>
 </svg>
 
@@ -94,7 +95,7 @@
       <button data-go="gallery"><svg class="ico"><use href="#i-image"/></svg><span data-i18n="gallery"></span></button>
       <button data-go="shop" class="nav-shop"><svg class="ico"><use href="#i-shop"/></svg><span data-i18n="shop"></span><i class="dot hidden" id="shop-dot"></i></button>
       <button data-go="ranks"><svg class="ico"><use href="#i-trophy"/></svg><span data-i18n="ranksNav"></span></button>
-      <button data-go="settings"><svg class="ico"><use href="#i-gear"/></svg><span data-i18n="settings"></span></button>
+      <button data-go="medals"><svg class="ico"><use href="#i-medal"/></svg><span data-i18n="medals"></span></button>
     </nav>
   </section>
 
@@ -177,6 +178,16 @@
   </section>
 
   <!-- ===== المتصدّرون ===== -->
+  <section class="screen" id="medals">
+    <header class="bar">
+      <button class="icon-btn" data-go="back" aria-label="back"><svg class="ico flip"><use href="#i-back"/></svg></button>
+      <h2 data-i18n="medals"></h2>
+      <span class="icon-btn ghost"></span>
+    </header>
+    <div class="md-sum" id="md-sum"></div>
+    <div class="scroll"><div class="md-grid" id="md-grid"></div></div>
+  </section>
+
   <section class="screen" id="ranks">
     <header class="bar">
       <button class="icon-btn" data-go="back" aria-label="back"><svg class="ico flip"><use href="#i-back"/></svg></button>
@@ -226,7 +237,7 @@
       <a class="set-row" id="set-policy" href="https://muhammedkado.github.io/siham-game/privacy.html" target="_blank" rel="noopener"><span data-i18n="privacyPolicy"></span><b>›</b></a>
       <a class="set-row apk-row hidden" id="set-apk" href="siham.apk" download="siham.apk"><span><span data-i18n="getApk"></span><small data-i18n="getApkSub"></small></span><b>⬇</b></a>
       <button class="btn-danger" id="set-reset" data-i18n="reset"></button>
-      <p class="version">Siham 3.3</p>
+      <p class="version">Siham 3.4</p>
     </div>
   </section>
 

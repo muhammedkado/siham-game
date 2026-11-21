@@ -592,3 +592,95 @@ body[data-theme="dark"] .icon-btn:not(.ghost){background:rgba(46,40,88,.92);bord
 }
 .cm-rays,.cm-beam{pointer-events:none}
 .chestm .m-actions{position:relative;z-index:8}
+
+/* ——— v3.4: الميداليات ——— */
+.md-disc{--c1:#eef0f6;--c2:#b9bccb;--c3:#9a9db0;position:relative;width:56px;height:56px;border-radius:50%;display:grid;place-items:center;flex:none;font-style:normal;
+  background:radial-gradient(circle at 35% 28%,var(--c1),var(--c2) 72%);border:3px solid var(--c3);box-shadow:inset 0 -4px 0 rgba(0,0,0,.16),inset 0 3px 0 rgba(255,255,255,.55),0 4px 10px rgba(0,0,0,.18);overflow:hidden}
+.md-disc i{font-style:normal;font-size:27px;line-height:1;filter:drop-shadow(0 2px 1px rgba(0,0,0,.2))}
+.md-disc.t0 i{filter:grayscale(1);opacity:.45;font-weight:900;color:#6b6f85}
+.md-disc.t1{--c1:#ffd7ae;--c2:#c27a3a;--c3:#8a4b1c}
+.md-disc.t2{--c1:#ffffff;--c2:#aeb8c8;--c3:#76829a}
+.md-disc.t3{--c1:#fff6b5;--c2:#f2a900;--c3:#b97a00}
+.md-disc.t4{--c1:#ead6ff;--c2:#7b3fe4;--c3:#4b1fa0}
+.md-disc.t5{--c3:#fff;background:conic-gradient(from 0deg,#7df9ff,#c77dff,#ff7ad9,#ffd166,#7df9ff);animation:mdLegend 2.4s ease-in-out infinite}
+.md-disc:not(.t0)::after{content:"";position:absolute;inset:-20%;background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,.65) 50%,transparent 60%);transform:translateX(-120%);animation:mdShine 3.2s ease-in-out infinite}
+.md-disc.xs{width:22px;height:22px;border-width:2px}.md-disc.xs i{font-size:11px}.md-disc.xs::after{display:none}
+.md-disc.sm{width:40px;height:40px}.md-disc.sm i{font-size:19px}
+.md-disc.big{width:118px;height:118px;border-width:5px}.md-disc.big i{font-size:58px}
+@keyframes mdShine{0%,55%{transform:translateX(-120%)}85%,100%{transform:translateX(120%)}}
+@keyframes mdLegend{50%{box-shadow:0 0 18px 4px rgba(199,125,255,.75),inset 0 -4px 0 rgba(0,0,0,.16)}}
+
+.md-medal{position:relative;width:118px;height:150px;margin:0 auto;display:flex;align-items:flex-end;justify-content:center}
+.md-medal .rb{position:absolute;top:0;width:34px;height:62px;border-radius:3px;z-index:0}
+.md-medal .rb.l{left:24px;background:linear-gradient(#e63946,#b5172b);transform:skewX(14deg)}
+.md-medal .rb.r{right:24px;background:linear-gradient(#3a86ff,#1d5fd1);transform:skewX(-14deg)}
+.md-medal.t0 .rb{filter:grayscale(1);opacity:.5}
+.md-medal .md-disc{z-index:1}
+
+.md-sum{display:flex;justify-content:center;gap:8px;margin:2px 0 12px;flex-wrap:wrap}
+.md-sum>span{display:inline-flex;align-items:center;gap:6px;background:var(--glass);border:1.5px solid var(--glass-b);border-radius:999px;padding:5px 14px;box-shadow:var(--shadow);font-size:15px;font-weight:800}
+.md-sum>span.legend{background:linear-gradient(90deg,#7df9ff,#c77dff,#ff7ad9);color:#fff;font-weight:900;padding:5px 14px;border-color:#fff}
+.md-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:2px 2px 14px}
+.md-card{background:var(--card);border:1.5px solid var(--glass-b);border-radius:18px;padding:12px 4px 10px;display:flex;flex-direction:column;align-items:center;gap:5px;box-shadow:var(--shadow);text-align:center;min-width:0}
+.md-card b{font-size:13px;font-weight:800;line-height:1.2}
+.md-card small{font-size:11px;color:var(--sub);font-weight:700}
+.md-card small.done{color:var(--ok)}
+.md-card.got.t3{background:linear-gradient(170deg,#fff8d6,var(--card) 60%)}
+.md-card.legend{grid-column:1/-1;flex-direction:row;gap:12px;padding:12px 16px;text-align:start}
+.md-card.legend b{font-size:15px}
+.md-card.legend .md-bar{flex:1}
+body[data-theme="night"] .md-card.got.t3,body[data-theme="dark"] .md-card.got.t3{background:linear-gradient(170deg,rgba(255,209,102,.22),var(--card) 60%)}
+.md-bar{display:block;width:80%;height:6px;background:var(--cell);border-radius:9px;overflow:hidden}
+.md-bar i{display:block;height:100%;background:linear-gradient(90deg,#ffd166,#ff9f1c);border-radius:9px}
+.md-pips{display:flex;gap:4px}
+.md-pips i{width:9px;height:9px;border-radius:50%;background:var(--cell)}
+.md-pips i.p1{background:#c27a3a}.md-pips i.p2{background:#aeb8c8}.md-pips i.p3{background:#f2a900}
+
+/* مشهد الفوز بميدالية */
+.md-stage{position:relative;height:170px;display:flex;align-items:center;justify-content:center;margin-top:2px}
+.md-stage .md-medal{z-index:2;animation:mdDrop 1s cubic-bezier(.3,1.4,.5,1) both}
+.md-rays{position:absolute;left:50%;top:55%;width:360px;height:360px;margin:-180px 0 0 -180px;border-radius:50%;pointer-events:none;z-index:1;
+  background:repeating-conic-gradient(rgba(255,226,120,.5) 0 9deg,transparent 9deg 24deg);-webkit-mask:radial-gradient(circle,#000 15%,transparent 66%);mask:radial-gradient(circle,#000 15%,transparent 66%);animation:mdRays .8s .4s ease-out both,spin 12s linear 1.2s infinite}
+@keyframes mdDrop{0%{transform:translateY(-170px) rotateY(0) scale(.6);opacity:0}55%{opacity:1;transform:translateY(8px) rotateY(540deg) scale(1.08)}100%{transform:translateY(0) rotateY(720deg) scale(1)}}
+@keyframes mdRays{from{opacity:0;transform:scale(.2)}to{opacity:1;transform:scale(1)}}
+.md-tier{display:inline-block;margin-top:8px;padding:2px 14px;border-radius:999px;font-weight:900;font-size:13px;color:#3b2400;background:#ffd166;animation:popIn .4s .8s both}
+.md-tier.t1{background:#e9a46a}.md-tier.t2{background:#dfe6f0}.md-tier.t3{background:linear-gradient(90deg,#ffe27a,#ffb703)}.md-tier.t4{background:#c9a4ff;color:#2a0b66}.md-tier.t5{background:linear-gradient(90deg,#7df9ff,#c77dff,#ff7ad9);color:#fff}
+.medalm .md-name{font-size:24px;margin:6px 0 2px;animation:popIn .4s .9s both}
+.medalm .md-desc{color:#d8cfff;font-size:14px;margin:0 0 8px;animation:popIn .4s 1s both}
+.md-more{display:flex;justify-content:center;gap:8px;margin:2px 0 8px;animation:popIn .4s 1.1s both}
+.md-rew{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:2px 0 10px;animation:popIn .4s 1.15s both}
+.md-rew span{display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.14);border:1.5px solid rgba(255,255,255,.3);border-radius:999px;padding:5px 12px;font-weight:800;color:#fff}
+.md-rew span.rare{background:linear-gradient(90deg,rgba(255,214,90,.45),rgba(255,140,60,.35));border-color:#ffe08a}
+.md-rew .ico{width:22px;height:22px}
+.medalm .m-actions{animation:popIn .4s 1.25s both}
+@media (max-height:620px){.md-stage{height:140px}.md-stage .md-medal{transform-origin:50% 100%;scale:.8}.medalm .md-name{font-size:20px}}
+
+/* تفاصيل ميدالية */
+.mdinfo .md-medal{margin-bottom:6px}
+.mdinfo .md-desc{color:var(--sub);margin:2px 0 10px}
+.md-rows{display:flex;flex-direction:column;gap:6px;text-align:start}
+.md-rows>div{display:flex;align-items:center;gap:8px;background:var(--cell);border-radius:14px;padding:7px 10px;font-size:14px;opacity:.75}
+.md-rows>div.on{opacity:1;box-shadow:inset 0 0 0 2px var(--ok)}
+.md-rows>div>span:not(.md-disc){flex:1;font-weight:800}
+.md-rows b{min-width:34px;text-align:center}
+.md-rows small{display:inline-flex;align-items:center;gap:3px;color:var(--sub);font-weight:700;font-size:12px}
+.md-rows small .ico{width:15px;height:15px}
+.md-rows em{font-style:normal;color:var(--ok);font-weight:900}
+.md-now{margin:10px 0 2px;color:var(--sub);font-size:14px}
+
+/* شاشة الفوز: أقرب ميدالية */
+.m-near{display:flex;align-items:center;justify-content:center;gap:6px;font-size:13px;font-weight:700;color:var(--sub);margin:6px 0 0}
+.sh-btn.medal{background:linear-gradient(90deg,#ffe27a,#ffb703);color:#5a3a00;opacity:1}
+.md-pips,.md-bar{direction:ltr}
+.md-sum .e{font-size:18px;line-height:1}
+.md-more{flex-wrap:wrap;gap:6px}
+.md-more .md-disc.sm{width:34px;height:34px;border-width:2px}.md-more .md-disc.sm i{font-size:16px}
+.medalm .m-actions{position:sticky;bottom:-18px;margin:0 -20px -18px;padding:10px 20px 16px;background:linear-gradient(rgba(36,21,96,0),#241560 30%);z-index:8}
+@media (max-height:700px){
+  .md-stage{height:128px}
+  .md-stage .md-medal{scale:.72;transform-origin:50% 60%}
+  .md-rays{width:280px;height:280px;margin:-140px 0 0 -140px}
+  .medalm .md-name{font-size:20px;margin-top:4px}
+  .medalm .md-desc{font-size:13px;margin-bottom:6px}
+  .md-rew{gap:6px;margin-bottom:6px}.md-rew span{padding:3px 10px;font-size:14px}
+}

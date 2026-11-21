@@ -17,6 +17,8 @@
     rec: {}, today: { d: null, n: 0 }, wins: 0,
     // الحساب ولوحة الصدارة: الاسم والصورة + نقاط هذا الأسبوع
     prof: { n: '', a: -1, t: 0 }, wk: { id: '', s: 0 },
+    // الميداليات: الدرجة المحققة لكل ميدالية + عدّادات التقدم
+    med: {}, mp: {},
   };
   const fresh = () => JSON.parse(JSON.stringify(DEFAULT));
   let S;
@@ -140,11 +142,12 @@
     if (id === 'pack') renderPack();
     if (id === 'shop') renderShop();
     if (id === 'ranks') renderRanks();
+    if (id === 'medals') renderMedals();
     coinUI();
     Ads.banner(id !== 'game');
     if (id === 'game') requestAnimationFrame(() => engine.resize());
     else { Music.stop(); idleStop(); }
-    if (id === 'home') setTimeout(() => { maybeLogin(); setTimeout(maybeAskAccount, 600); }, 350);
+    if (id === 'home') setTimeout(() => { maybeLogin(); setTimeout(maybeMedals, 250); setTimeout(maybeAskAccount, 900); }, 350);
   }
   document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => { Sound.click(); show(b.dataset.go); }));
 
@@ -299,7 +302,7 @@
     modalOpen = Object.assign({ actions }, opts || {});
     $('modal-card').querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => { Sound.click(); actions[b.dataset.a](); }));
   }
-  function closeModal() { $('modal').classList.add('hidden'); modalOpen = null; }
+  function closeModal() { $('modal').classList.add('hidden'); modalOpen = null; if (current === 'home') setTimeout(maybeMedals, 450); }
 
   // ——— اللعب ———
   const G = { mode: 'journey', n: 1, level: null, usedChance: false, combo: 0, lastExit: 0, coachStep: 0, streak: 0, best: 0, miss: 0, nudge: 0 };
@@ -333,7 +336,7 @@
       }
     },
     onWin, onLose,
-    onLens(ok) { Sound.lens(ok); toast(ok ? t('lensClear') : t('lensBlocked')); if (G.mode !== 'zen') { S.lenses--; save(); } setLensUI(false); updateTools(); },
+    onLens(ok) { G.lensUsed = (G.lensUsed || 0) + 1; Sound.lens(ok); toast(ok ? t('lensClear') : t('lensBlocked')); if (G.mode !== 'zen') { S.lenses--; save(); } setLensUI(false); updateTools(); },
     onAutoZoom() { toast(t('autoZoom')); vibrate(15); },
     onTrace() { vibrate(15); hideCoach(); },
   });
@@ -382,7 +385,7 @@
   function launch(level, hearts, zen) {
     G.level = level; G.usedChance = false; G.combo = 0;
     G.streak = 0; G.best = 0; G.miss = 0; G.nudge = 0; G.calmShown = false; G.adHearts = 0; G.coinHearts = 0; G.bonus = 0;
-    G.t0 = Date.now(); G.hidAt = 0; G.hintsUsed = 0; G.misses = 0;
+    G.t0 = Date.now(); G.hidAt = 0; G.hintsUsed = 0; G.lensUsed = 0; G.misses = 0;
     applyStyle();
     hideCoach(); hideNudge(true); closeModal(); setLensUI(false); clearFx();
     show('game');
@@ -636,6 +639,7 @@
   }
 
   function onWin() {
+    G.dailyNew = false;
     Music.stop(); idleStop(); engine.calm();
     if (engine.zoomed) engine.fit(true);
     Sound.win(); vibrate([20, 40, 20, 40, 60]);
@@ -666,7 +670,7 @@
       }
     } else if (G.mode === 'daily' && S.daily.last !== today()) {
       S.daily.streak = S.daily.last === yesterday() ? S.daily.streak + 1 : 1;
-      S.daily.last = today();
+      S.daily.last = today(); G.dailyNew = true;
       S.hints++; S.lenses++; rewards.push('+1 💡', '+1 🔍', '🔥 ' + S.daily.streak);
       earn.push([t('cDaily'), ECON.daily + ECON.dailyStreak * Math.min(5, S.daily.streak)]);
     }
@@ -689,6 +693,8 @@
     const coinsWon = earn.reduce((a, e) => a + e[1], 0);
     S.coins += coinsWon;
     save(); updateTools();
+    medalWin(ms);
+    const newMedals = medalCheck();
     let bonusDone = false, coinTotal = coinsWon;
     // نعرضها كدالة: بعد فتح الصندوق نرجّع نافذة الفوز بدل ما تبقى الشاشة بلا أزرار
     const showWin = again => {
@@ -723,8 +729,9 @@
       ${G.mode === 'zen' ? '' : `<div class="m-stars">${[1, 2, 3].map(i => icon('i-star', i <= stars ? 'on' : '')).join('')}</div>`}
       ${flawless}
       ${statsHtml}
-      ${coinsWon ? `<div class="m-coins"><div class="mc-rows">${earn.filter(e => e[1]).map(e => `<span>${esc(e[0])}<b>+${e[1]}</b></span>`).join('')}</div><div class="mc-total">${icon('i-coin')}<b id="m-coin-n">+0</b></div></div>` : ''}
+      ${coinsWon ? `<div class="m-coins"><div class="mc-rows">${earn.filter(e => e[1]).map(e => `<span>${esc(e[0])}<b dir="ltr">+${e[1]}</b></span>`).join('')}</div><div class="mc-total">${icon('i-coin')}<b id="m-coin-n" dir="ltr">+0</b></div></div>` : ''}
       ${rewards.length ? `<div class="m-reward">${t('reward')}: ${rewards.join(' ')}</div>` : ''}
+      ${G.mode === 'zen' || love ? '' : nearHtml()}
       ${path}
       <div class="m-actions">${S.chestReady ? `<button class="btn chest-btn" data-a="chest">${icon('i-chest')} ${t('openChest')}</button>` : ''}${nextBtn}${bonusBtn}${homeBtn}</div>`,
     {
@@ -752,10 +759,11 @@
     const sp = G.level.spec || {};
     requestAnimationFrame(() => drawArt($('m-pic'), G.mode === 'gift' ? null : sp.pic, sp.w || sp.f, sp.mirror, 'full', G.level));
     };
-    showWin(false);
+    if (newMedals.length) medalCeremony(newMedals, () => showWin(false)); else showWin(false);
   }
 
   function onLose() {
+    medalLose();
     Music.stop(); idleStop();
     Sound.lose();
     const hp = ECON.heart * ((G.coinHearts || 0) + 1);
@@ -957,6 +965,183 @@
     box.addEventListener('click', open);
     setTimeout(open, 2600);
   }
+  // ===================== الميداليات =====================
+  // ميداليات بدرجات (برونز/فضة/ذهب) + سرية + أسطورية. المراحل الصغيرة (<30 سهماً) لا تُحسب
+  // في السلاسل حتى لا تُستغل بإعادة مرحلة سهلة.
+  const MEDAL_TRAIL0 = 8;               // ستايلات الأسهم 8..10 للذهبيات، 11 للأسطورية (لا تُشترى)
+  const MEDAL_GOLD_TRAILS = [8, 9, 10], MEDAL_LEGEND_TRAIL = 11;
+  const mp = k => S.mp[k] || 0;
+  const MEDALS = [
+    { id: 'flaw', ic: '✨', tiers: [5, 15, 30], v: () => mp('flawBest'), cur: () => mp('flawRun') },
+    { id: 'sniper', ic: '🎯', tiers: [20, 40, 60], v: () => mp('arrowBest') },
+    { id: 'loyal', ic: '🔥', tiers: [7, 30, 100], v: () => Math.max(mp('dailyBest'), S.daily.last === today() || S.daily.last === yesterday() ? S.daily.streak || 0 : 0) },
+    { id: 'mind', ic: '🧠', tiers: [5, 20, 50], v: () => mp('noHelp') },
+    { id: 'bolt', ic: '⚡', tiers: [1, 5, 20], v: () => mp('bolt') },
+    { id: 'travel', ic: '🗺️', tiers: [50, 150, 300], v: () => S.level - 1 },
+    { id: 'perfect', ic: '⭐', tiers: [30, 100, 250], v: () => Object.values(S.stars).filter(x => x >= 3).length },
+    { id: 'collect', ic: '🖼️', tiers: [10, 25, 0], v: () => picCount() + Gen.packPics().filter(p => S.pack[p.id]).length },
+    { id: 'owl', ic: '🌙', secret: 1, goal: 1, v: () => mp('owl') },
+    { id: 'stubborn', ic: '💪', secret: 1, goal: 1, v: () => mp('stub') },
+    { id: 'edge', ic: '❤️', secret: 1, goal: 10, v: () => mp('edge') },
+    { id: 'dperf', ic: '👑', secret: 1, goal: 7, v: () => mp('dperf') },
+    { id: 'legend', ic: '💎', legend: 1, goal: 8, v: () => MEDALS.filter(m => m.tiers && (S.med[m.id] || 0) >= 3).length },
+  ];
+  const tiersOf = m => m.tiers.map(x => x || (Gen.mainPics().length + Gen.packPics().length));
+  const mName = m => (t('md')[m.id] || [m.id])[0];
+  const mDesc = m => (t('md')[m.id] || ['', ''])[1];
+  const tierName = tr => t('medalTiers')[tr - 1] || '';
+  const tierRank = tr => [0, 1, 2, 4, 3, 5][tr];          // السرية بين الفضية والذهبية
+  function medalDisc(m, tier, cls) {
+    const hide = m.secret && !tier;
+    return `<span class="md-disc t${tier || 0} ${cls || ''}"><i>${hide ? '?' : m.ic}</i></span>`;
+  }
+  function medalMedal(m, tier) {
+    return `<div class="md-medal t${tier}"><i class="rb l"></i><i class="rb r"></i>${medalDisc(m, tier, 'big')}</div>`;
+  }
+
+  /** يحدّث العدّادات بعد الفوز */
+  function medalWin(ms) {
+    if (G.mode === 'zen' || G.mode === 'gift') return;
+    const M = S.mp, flawless = engine.mistakes === 0 && !G.usedChance, big = engine.total >= 30;
+    const hard = G.diff === 'hard' || G.diff === 'expert';
+    M.arrowBest = Math.max(M.arrowBest || 0, G.best || 0);
+    if (big) {
+      if (flawless) { M.flawRun = (M.flawRun || 0) + 1; M.flawBest = Math.max(M.flawBest || 0, M.flawRun); }
+      else M.flawRun = 0;
+      if (engine.hearts === 1) M.edge = (M.edge || 0) + 1;
+    }
+    if (hard && !G.hintsUsed && !G.lensUsed) M.noHelp = (M.noHelp || 0) + 1;
+    if (hard && flawless && ms / engine.total <= 1250) M.bolt = (M.bolt || 0) + 1;
+    if (new Date().getHours() < 4) M.owl = 1;
+    const key = medalKey();
+    if (M.lz && M.lz.k === key && M.lz.c >= 5) M.stub = 1;
+    M.lz = null;
+    if (G.mode === 'daily' && G.dailyNew && flawless) M.dperf = (M.dperf || 0) + 1;
+    M.dailyBest = Math.max(M.dailyBest || 0, S.daily.streak || 0);
+  }
+  function medalLose() {
+    if (G.mode === 'zen' || G.mode === 'gift') return;
+    const M = S.mp, key = medalKey();
+    M.flawRun = 0;
+    M.arrowBest = Math.max(M.arrowBest || 0, G.best || 0);
+    M.lz = M.lz && M.lz.k === key ? { k: key, c: M.lz.c + 1 } : { k: key, c: 1 };
+    save();
+  }
+  const medalKey = () => G.mode === 'journey' ? 'j' + G.n : G.mode === 'daily' ? 'd' + today() : 'p' + G.pk;
+
+  /** يمنح الدرجات الجديدة وجوائزها ويرجع قائمتها */
+  function medalCheck() {
+    const out = [];
+    const give = (m, tier) => {
+      const r = { m, tier, c: [0, 50, 150, 400, 150, 1000][tier], chest: tier === 2 || tier === 4 ? 1 : 0, trail: null };
+      if (tier === 3) { const tr = MEDAL_GOLD_TRAILS.find(i => !S.own.trail.includes(i)); if (tr != null) r.trail = tr; else r.chest = 1; }
+      if (tier === 5 && !S.own.trail.includes(MEDAL_LEGEND_TRAIL)) r.trail = MEDAL_LEGEND_TRAIL;
+      S.coins += r.c; if (r.chest) S.chestReady = (S.chestReady || 0) + r.chest;
+      if (r.trail != null) S.own.trail.push(r.trail);
+      out.push(r);
+    };
+    for (const m of MEDALS) {
+      const had = S.med[m.id] || 0, v = m.v();
+      if (m.tiers) {
+        const got = tiersOf(m).filter(x => v >= x).length;
+        for (let tr = had + 1; tr <= got; tr++) give(m, tr);
+        if (got > had) S.med[m.id] = got;
+      } else if (!had && v >= m.goal) { S.med[m.id] = 1; give(m, m.legend ? 5 : 4); }
+    }
+    if (out.length) { S.medT = Date.now(); save(); updateTools(); }
+    return out;
+  }
+  function maybeMedals() {
+    if (current !== 'home' || modalOpen) return;
+    const nw = medalCheck();
+    if (nw.length) medalCeremony(nw);
+  }
+
+  /** مشهد الفوز بميدالية (أو عدة ميداليات) */
+  function medalCeremony(list, after) {
+    const top = list.reduce((a, b) => tierRank(b.tier) > tierRank(a.tier) ? b : a);
+    const hi = {}; list.forEach(x => { if (!hi[x.m.id] || x.tier > hi[x.m.id].tier) hi[x.m.id] = x; });
+    const rest = Object.values(hi).filter(x => x.m !== top.m);
+    const coins = list.reduce((a, x) => a + x.c, 0), chests = list.reduce((a, x) => a + x.chest, 0), trails = list.filter(x => x.trail != null);
+    const need = top.m.tiers ? tiersOf(top.m)[top.tier - 1] : top.m.goal;
+    modal(`<div class="cm-fx" id="cm-fx"></div><h3>${list.length > 1 ? t('medalNew2') : t('medalNew')}</h3>
+      <div class="md-stage" id="md-stage"><i class="md-rays"></i>${medalMedal(top.m, top.tier)}</div>
+      <span class="md-tier t${top.tier}">${tierName(top.tier)}</span>
+      <h3 class="md-name">${mName(top.m)}</h3>
+      <p class="md-desc">${mDesc(top.m)}${top.m.tiers || top.m.goal > 1 ? ` · <b dir="ltr">${need}</b>` : ''}</p>
+      ${rest.length ? `<div class="md-more">${rest.map(x => `<span title="${esc(mName(x.m))}">${medalDisc(x.m, x.tier, 'sm')}</span>`).join('')}</div>` : ''}
+      <div class="md-rew">${coins ? `<span>${icon('i-coin')}<b dir="ltr">+${coins}</b></span>` : ''}${chests ? `<span>${icon('i-chest')}<b dir="ltr">+${chests}</b></span>` : ''}${trails.map(x => `<span class="rare">✨ ${esc(styleName('trail', x.trail)[S.set.lang] || '')}</span>`).join('')}</div>
+      <div class="m-actions"><button class="btn primary" data-a="ok">${t('medalCont')}</button></div>`,
+    { ok: () => { closeModal(); coinUI(); if (current === 'home') renderHome(); if (after) after(); } }, { locked: true, cls: ' chestm medalm' });
+    Sound.unlock(); setTimeout(() => Sound.chest(), 250); setTimeout(() => Sound.reward(), 900);
+    vibrate([20, 40, 30, 40, 80]);
+    setTimeout(() => {
+      const fx = $('cm-fx'), st = $('md-stage'); if (!fx || !st) return;
+      const cx = fx.clientWidth / 2, cy = st.offsetTop + st.offsetHeight / 2;
+      let h = '';
+      for (let i = 0; i < 24; i++) {
+        const dx = ((i / 24) * 2 - 1) * 150 + (Math.random() - 0.5) * 40, dy = -(70 + Math.random() * 120), k = i % 3;
+        h += `<b class="cm-p ${k ? 's' : 'g'}" style="left:${cx}px;top:${cy}px;--dx:${dx | 0}px;--dy:${dy | 0}px;--rot:${(Math.random() * 720 - 360) | 0}deg;--dl:${(Math.random() * 0.2).toFixed(2)}s;--sz:${(13 + Math.random() * 12) | 0}px">${k === 2 ? '★' : '✦'}</b>`;
+      }
+      fx.innerHTML = h;
+    }, 650);
+  }
+
+  /** أقرب ميدالية لشاشة الفوز: "باقي 2 لميدالية بلا غلطة الفضية" */
+  function medalNear() {
+    let best = null;
+    for (const m of MEDALS) {
+      if (!m.tiers) continue;
+      const e = S.med[m.id] || 0; if (e >= 3) continue;
+      const need = tiersOf(m)[e], v = m.cur ? m.cur() : m.v(), left = need - v;
+      if (v <= 0 || left <= 0 || left > Math.max(2, Math.ceil(need * 0.1))) continue;
+      const r = v / need;
+      if (!best || r > best.r) best = { m, left, tier: e + 1, r };
+    }
+    return best;
+  }
+  function nearHtml() {
+    const n = medalNear(); if (!n) return '';
+    return `<div class="m-near">${medalDisc(n.m, n.tier, 'xs')}<span>${t('medalNear').replace('{n}', `<b dir="ltr">${n.left}</b>`)} <b>${mName(n.m)}</b> ${t('medalTiersAl')[n.tier - 1]}</span></div>`;
+  }
+
+  /** صفحة الميداليات */
+  function renderMedals() {
+    const cnt = tr => MEDALS.filter(m => m.tiers && (S.med[m.id] || 0) >= tr).length;
+    const sec = MEDALS.filter(m => m.secret && S.med[m.id]).length, nSec = MEDALS.filter(m => m.secret).length;
+    $('md-sum').innerHTML = (S.med.legend ? `<span class="legend">💎 ${t('legendTitle')}</span>` : '')
+      + `<span><i class="e">🥇</i><b>${cnt(3)}</b></span><span><i class="e">🥈</i><b>${cnt(2)}</b></span><span><i class="e">🥉</i><b>${cnt(1)}</b></span><span><i class="e">🔮</i><b dir="ltr">${sec}/${nSec}</b></span>`;
+    $('md-grid').innerHTML = MEDALS.map((m, i) => {
+      const e = S.med[m.id] || 0;
+      const tierShow = m.tiers ? e : e ? (m.legend ? 5 : 4) : 0;
+      let prog = '';
+      if (m.tiers) {
+        if (e >= 3) prog = `<small class="done">✓ ${t('medalDone')}</small>`;
+        else { const need = tiersOf(m)[e], v = Math.min(need, m.cur ? m.cur() : m.v()); prog = `<span class="md-bar"><i style="width:${Math.round(100 * v / need)}%"></i></span><small dir="ltr">${v}/${need}</small>`; }
+        prog = `<span class="md-pips">${[1, 2, 3].map(k => `<i class="${e >= k ? 'on p' + k : ''}"></i>`).join('')}</span>` + prog;
+      } else if (e) prog = `<small class="done">✓ ${tierName(tierShow)}</small>`;
+      else if (m.secret) prog = `<small>${t('medalSecretSub')}</small>`;
+      else { const v = Math.min(m.goal, m.v()); prog = `<span class="md-bar"><i style="width:${Math.round(100 * v / m.goal)}%"></i></span><small dir="ltr">${v}/${m.goal}</small>`; }
+      const nm = m.secret && !e ? t('medalSecret') : mName(m);
+      return `<button class="md-card ${tierShow ? 'got t' + tierShow : ''} ${m.legend ? 'legend' : ''}" data-md="${i}">${medalDisc(m, tierShow)}<b>${nm}</b>${prog}</button>`;
+    }).join('');
+    $('md-grid').querySelectorAll('[data-md]').forEach(b => b.addEventListener('click', () => { Sound.click(); medalInfo(MEDALS[+b.dataset.md]); }));
+  }
+  function medalInfo(m) {
+    const e = S.med[m.id] || 0;
+    if (m.secret && !e) { modal(`${medalMedal(m, 0)}<h3>${t('medalSecret')}</h3><p>${t('medalSecretSub')}</p><div class="m-actions"><button class="btn primary" data-a="ok">${t('ok')}</button></div>`, { ok: closeModal }, { cls: ' mdinfo' }); return; }
+    const rewards = ['', `${icon('i-coin')} 50`, `${icon('i-coin')} 150 + ${icon('i-chest')}`, `${icon('i-coin')} 400 + ✨`];
+    let rows = '';
+    if (m.tiers) {
+      rows = `<div class="md-rows">${tiersOf(m).map((x, k) => `<div class="${e > k ? 'on' : ''}">${medalDisc(m, k + 1, 'xs')}<span>${tierName(k + 1)}</span><b dir="ltr">${x}</b><small>${rewards[k + 1]}</small>${e > k ? '<em>✓</em>' : ''}</div>`).join('')}</div>`;
+      const v = m.v();
+      rows += `<p class="md-now">${m.cur ? `${t('medalNow')}: <b dir="ltr">${m.cur()}</b> · ${t('medalBest')}: <b dir="ltr">${v}</b>` : `${t('medalNow')}: <b dir="ltr">${v}</b>`}</p>`;
+    } else {
+      rows = `<div class="md-rows"><div class="${e ? 'on' : ''}">${medalDisc(m, m.legend ? 5 : 4, 'xs')}<span>${tierName(m.legend ? 5 : 4)}</span><b dir="ltr">${Math.min(m.goal, m.v())}/${m.goal}</b><small>${m.legend ? `${icon('i-coin')} 1000 + ✨` : rewards[2]}</small>${e ? '<em>✓</em>' : ''}</div></div>`;
+    }
+    modal(`${medalMedal(m, m.tiers ? e : e ? (m.legend ? 5 : 4) : 0)}<h3>${mName(m)}</h3><p class="md-desc">${mDesc(m)}</p>${rows}<div class="m-actions"><button class="btn primary" data-a="ok">${t('ok')}</button></div>`, { ok: closeModal }, { cls: ' mdinfo' });
+  }
+
   function offerTry(st, after) {
     modal(`<h3>✨</h3><h3 style="font-size:22px">${t('newStyle')}</h3><canvas class="m-prev" id="m-prev"></canvas><p><b>${esc(styleName(st.kind, st.i)[S.set.lang] || '')}</b></p>
       <div class="m-actions"><button class="btn primary" data-a="use">${t('tryStyle')}</button><button class="btn" data-a="no">${t('later')}</button></div>`,
@@ -1008,12 +1193,13 @@
     const kind = shopTab, list = kind === 'trail' ? window.ArrowTrails : window.ArrowSkins.map(n => ({ name: n }));
     g.innerHTML = list.map((it, i) => {
       const own = S.own[kind].includes(i), on = S.eq[kind] === i, p = priceOf(kind, i);
-      const btn = on ? `<button class="sh-btn on" disabled>${t('equipped')}</button>` : own ? `<button class="sh-btn" data-eq="${i}">${t('equip')}</button>` : `<button class="sh-btn buy ${p > S.coins ? 'poor' : ''}" data-buy="${i}">${icon('i-coin')} ${p}</button>`;
+      const btn = !own && kind === 'trail' && i >= MEDAL_TRAIL0 ? `<button class="sh-btn medal" disabled>🏅 ${t('medalOnly')}</button>` : on ? `<button class="sh-btn on" disabled>${t('equipped')}</button>` : own ? `<button class="sh-btn" data-eq="${i}">${t('equip')}</button>` : `<button class="sh-btn buy ${p > S.coins ? 'poor' : ''}" data-buy="${i}">${icon('i-coin')} ${p}</button>`;
       return `<div class="sh-card ${on ? 'on' : ''} ${own ? '' : 'locked'}"><canvas data-i="${i}"></canvas><b>${esc(it.name[S.set.lang])}</b>${btn}</div>`;
     }).join('');
     g.querySelectorAll('[data-eq]').forEach(b => b.addEventListener('click', () => { Sound.click(); S.eq[kind] = +b.dataset.eq; save(); applyStyle(); renderShop(); }));
     g.querySelectorAll('[data-buy]').forEach(b => b.addEventListener('click', () => {
       const i = +b.dataset.buy, p = priceOf(kind, i);
+      if (kind === 'trail' && i >= MEDAL_TRAIL0) return;
       if (S.coins < p) { Sound.bump(); vibrate(30); b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake'); toast(t('notEnough').replace('{n}', p - S.coins)); return; }
       S.coins -= p; S.own[kind].push(i); S.eq[kind] = i; save(); applyStyle();
       Sound.reward(); vibrate([15, 30, 15]); toast(t('bought'));
@@ -1060,6 +1246,8 @@
     o.today = a.today && b.today && a.today.d === b.today.d ? { d: a.today.d, n: Math.max(a.today.n, b.today.n) } : newer(a.today, b.today, 'd');
     o.wk = a.wk && b.wk && a.wk.id === b.wk.id ? { id: a.wk.id, s: Math.max(a.wk.s, b.wk.s) } : newer(a.wk, b.wk, 'id');
     o.seen = Object.assign({}, b.seen, a.seen);
+    o.med = mx(a.med, b.med); o.mp = Object.assign({}, b.mp, a.mp);
+    for (const k in (b.mp || {})) if (typeof b.mp[k] === 'number' && typeof (a.mp || {})[k] === 'number') o.mp[k] = Math.max(a.mp[k], b.mp[k]);
     o.prof = ((b.prof && b.prof.t) || 0) > ((a.prof && a.prof.t) || 0) ? b.prof : a.prof;
     return o;
   }

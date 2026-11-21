@@ -1121,6 +1121,11 @@
     { anim: true, name: { ar: 'حمم بركانية 🌋', en: 'Lava' }, glow: true, sw: ['#ff5400', '#ffd166', '#7a1500'], col: (id, t) => { const k = Math.floor(t * 6 + id * 1.7) % 3; return { b: ['#ff5400', '#ff7b00', '#ff3d00'][k], e: '#7a1500', h: '#ffd166' }; } },
     { anim: true, name: { ar: 'قوس قزح 🌈', en: 'Rainbow' }, sw: ['#ff4d4d', '#ffd400', '#2ecc71', '#3a86ff', '#9b5de5'], col: (id, t) => { const h = (Math.round(((id * 47 + t * 60) % 360) / 15) * 15); return { b: hsl(h, 90, 58), e: hsl(h, 70, 32), h: hsl(h, 100, 86) }; } },
     { anim: true, name: { ar: 'مجرّة 🌌', en: 'Galaxy' }, glow: true, sw: ['#7b2ff7', '#f107a3', '#1a0b3d'], col: (id, t) => { const h = 260 + 50 * Math.sin(t * 1.5 + id); const hq = Math.round(h / 10) * 10; return { b: hsl(hq, 85, 55), e: '#160a33', h: '#f5e1ff' }; } },
+    // ——— حصرية للميداليات (لا تُشترى) ———
+    { anim: true, medal: true, glow: true, name: { ar: 'ألماس 💎', en: 'Diamond 💎' }, sw: ['#c9f3ff', '#ffffff', '#2f86c0'], col: (id, t) => ((Math.floor(t * 3 + id * 0.53) % 9) === 0 ? { b: '#ffffff', e: '#3aa0d8', h: '#ffffff' } : { b: id % 2 ? '#a8e8ff' : '#c9f3ff', e: '#2f86c0', h: '#ffffff' }) },
+    { anim: true, medal: true, glow: true, name: { ar: 'شفق 🌠', en: 'Aurora 🌠' }, sw: ['#2bffb1', '#4cc9f0', '#b388ff'], col: (id, t) => { const h = Math.round((170 + 75 * Math.sin(t * 1.2 + id * 0.45)) / 10) * 10; return { b: hsl(h, 85, 58), e: hsl(h, 70, 24), h: hsl(h, 100, 88) }; } },
+    { anim: true, medal: true, name: { ar: 'ملكي 👑', en: 'Royal 👑' }, sw: ['#7b35a8', '#f5b700', '#2b0f40'], col: (id, t) => ((id + Math.floor(t * 1.5)) % 3 === 0 ? { b: '#f5b700', e: '#7a4a00', h: '#fff1a8' } : { b: '#7b35a8', e: '#2b0f40', h: '#e6c8ff' }) },
+    { anim: true, medal: true, glow: true, name: { ar: 'أسطوري 🔱', en: 'Legendary 🔱' }, sw: ['#00e5ff', '#ff3d7f', '#ffd166'], col: (id, t) => { const h = [190, 330, 45][Math.floor((t * 0.8 + id * 0.21) % 3)]; return { b: hsl(h, 95, 58), e: hsl(h, 80, 26), h: '#ffffff' }; } },
   ];
   root.ArrowTrails = TRAILS.map(k => ({ name: k.name, sw: k.sw }));
 
