@@ -502,3 +502,24 @@ body[data-theme="dark"] .icon-btn:not(.ghost){background:rgba(46,40,88,.92);bord
 #game .bar .nudge #nudge-t{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 #game .bar .nudge .nudge-ic{width:24px;height:24px;font-size:14px}
 @keyframes nudgeBar{from{opacity:0;transform:translateY(-50%) scale(.9)}to{opacity:1;transform:translateY(-50%)}}
+
+/* v3.0: الصورة الغامضة تصغر عند ضيق الشاشة (أو ظهور البانر) بدل أن يتسرب الصندوق تحت زر اللعب */
+.mystery{min-height:0;overflow:visible}
+.mystery>*{flex-shrink:0}
+.mystery canvas{flex:0 1 auto;aspect-ratio:1/1;width:auto;max-width:none;max-height:none;min-height:36px;height:min(40vw,170px,19vh)}
+@media (max-height:700px){.mystery canvas{height:min(34vw,15vh)}}
+@media (max-height:680px){
+  .tagline,.mystery-label{display:none}
+  .logo h1{font-size:36px;margin:2px 0 0}
+  .btn-primary.big{padding:10px;font-size:22px}
+  .mode-row{margin-top:8px;gap:8px}
+  .mode-card{padding:8px 8px;gap:1px;font-size:15px}
+  .bottom-nav{margin-top:8px;padding:3px}
+  .bottom-nav button{padding:3px 12px}
+  .mystery{gap:4px}
+}
+@media (max-height:580px){
+  .rank{display:none}
+  .mode-card small{display:none}
+}
+.mystery{padding-bottom:10px}
