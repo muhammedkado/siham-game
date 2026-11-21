@@ -689,6 +689,9 @@
     const coinsWon = earn.reduce((a, e) => a + e[1], 0);
     S.coins += coinsWon;
     save(); updateTools();
+    let bonusDone = false, coinTotal = coinsWon;
+    // نعرضها كدالة: بعد فتح الصندوق نرجّع نافذة الفوز بدل ما تبقى الشاشة بلا أزرار
+    const showWin = again => {
     const name = esc(G.level.picName[S.set.lang]);
     const love = G.mode === 'gift';
     const sub = G.mode === 'daily' ? t('dailyWin') : love ? `${t('loveWin')}: <b style="color:#e5383b">${name}</b>` : `${t('winSub')}: <b>${name}</b>`;
@@ -711,7 +714,7 @@
       const n = G.n + i, cls = i === 0 ? 'cur' : n < S.level ? 'done' : n === S.level ? 'next' : '';
       return `<span class="${cls}">${n}</span>`;
     }).join('')}</div>` : '';
-    const bonusBtn = !love && Ads.ready() ? `<button class="btn ad-btn" data-a="bonus">${coinsWon ? t('adDouble') : t('adBonus')}</button>` : '';
+    const bonusBtn = !love && !bonusDone && Ads.ready() ? `<button class="btn ad-btn" data-a="bonus">${coinsWon ? t('adDouble') : t('adBonus')}</button>` : '';
     const hasNextPack = G.mode === 'pack' && G.pk + 1 < Gen.packPics().length;
     const nextBtn = G.mode === 'journey' || hasNextPack ? `<button class="btn primary" data-a="next">${t('next')} ➜</button>` : G.mode === 'zen' ? `<button class="btn primary" data-a="zen">${t('newZen')}</button>` : '';
     const homeBtn = G.mode === 'pack' || G.mode === 'gift' ? `<button class="btn" data-a="pack">${t('more')} 🐾</button>` : `<button class="btn" data-a="home">${t('home')}</button>`;
@@ -725,13 +728,14 @@
       ${path}
       <div class="m-actions">${S.chestReady ? `<button class="btn chest-btn" data-a="chest">${icon('i-chest')} ${t('openChest')}</button>` : ''}${nextBtn}${bonusBtn}${homeBtn}</div>`,
     {
-      chest: () => openChest(),
+      chest: () => openChest(false, () => showWin(true)),
       next: () => { G.mode === 'pack' ? startPack(G.pk + 1) : startLevel(G.n + 1); Ads.afterWin(); },
       zen: () => { startZen(); Ads.afterWin(); },
       home: () => { closeModal(); show('home'); Ads.afterWin(); },
       pack: () => { closeModal(); show('pack'); Ads.afterWin(); },
       bonus: () => Ads.reward('bonus', () => {
-        if (coinsWon) { S.coins += coinsWon; Sound.coins(); countUp($('m-coin-n'), coinsWon * 2, 600); }
+        bonusDone = true;
+        if (coinsWon) { S.coins += coinsWon; coinTotal = coinsWon * 2; Sound.coins(); countUp($('m-coin-n'), coinTotal, 600); }
         else { S.hints++; S.lenses++; Sound.hint(); }
         save(); updateTools(); coinUI();
         const b = document.querySelector('#modal [data-a=bonus]');
@@ -739,13 +743,16 @@
       }),
        }, { cls: 'win' });
     document.querySelectorAll('.m-stars .ico.on').forEach((el, i) => { el.style.animationDelay = (0.15 + i * 0.18) + 's'; });
-    if (coinsWon) countUp($('m-coin-n'), coinsWon, 700);
+    if (coinsWon) { if (again) $('m-coin-n').textContent = '+' + coinTotal; else countUp($('m-coin-n'), coinsWon, 700); }
     const scEl = $('m-score');
-    if (scEl) { const s0 = performance.now(); const tick = now => { const p = Math.min(1, (now - s0) / 900); scEl.textContent = Math.round(score * (1 - Math.pow(1 - p, 3))); if (p < 1 && scEl.isConnected) requestAnimationFrame(tick); }; requestAnimationFrame(tick); }
-    if (newScore || newTime) setTimeout(() => { Sound.reward && Sound.reward(); vibrate([15, 30, 15]); }, 900);
+    if (scEl && again) scEl.textContent = score;
+    else if (scEl) { const s0 = performance.now(); const tick = now => { const p = Math.min(1, (now - s0) / 900); scEl.textContent = Math.round(score * (1 - Math.pow(1 - p, 3))); if (p < 1 && scEl.isConnected) requestAnimationFrame(tick); }; requestAnimationFrame(tick); }
+    if (!again && (newScore || newTime)) setTimeout(() => { Sound.reward && Sound.reward(); vibrate([15, 30, 15]); }, 900);
     coinUI();
     const sp = G.level.spec || {};
     requestAnimationFrame(() => drawArt($('m-pic'), G.mode === 'gift' ? null : sp.pic, sp.w || sp.f, sp.mirror, 'full', G.level));
+    };
+    showWin(false);
   }
 
   function onLose() {
@@ -903,7 +910,7 @@
       <div class="cm-stage" id="chest-big"><i class="cm-rays"></i><i class="cm-beam"></i>${chestSvg()}</div>
       <div class="cm-zone"><p class="cm-tap" id="cm-tap">${t('tapOpen')}</p><div class="cm-loot hidden" id="chest-loot"></div></div>
       <div class="m-actions"><button class="btn primary hidden" data-a="ok">${t('collect')}</button></div>`, {
-      ok: () => { closeModal(); if (current === 'home') renderHome(); if (after) after(); if (r.style) offerTry(r.style); },
+      ok: () => { closeModal(); if (current === 'home') renderHome(); if (r.style) offerTry(r.style, after); else if (after) after(); },
     }, { locked: true, cls: ' chestm' });
     Sound.unlock();
     const box = $('chest-big');
@@ -950,10 +957,10 @@
     box.addEventListener('click', open);
     setTimeout(open, 2600);
   }
-  function offerTry(st) {
+  function offerTry(st, after) {
     modal(`<h3>✨</h3><h3 style="font-size:22px">${t('newStyle')}</h3><canvas class="m-prev" id="m-prev"></canvas><p><b>${esc(styleName(st.kind, st.i)[S.set.lang] || '')}</b></p>
       <div class="m-actions"><button class="btn primary" data-a="use">${t('tryStyle')}</button><button class="btn" data-a="no">${t('later')}</button></div>`,
-    { use: () => { S.eq[st.kind] = st.i; save(); applyStyle(); closeModal(); toast(t('equipped')); }, no: closeModal });
+    { use: () => { S.eq[st.kind] = st.i; save(); applyStyle(); closeModal(); toast(t('equipped')); if (after) after(); }, no: () => { closeModal(); if (after) after(); } });
     requestAnimationFrame(() => drawArrowPreview($('m-prev'), st.kind, st.i, 0));
   }
 
