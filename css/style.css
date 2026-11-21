@@ -684,3 +684,33 @@ body[data-theme="night"] .md-card.got.t3,body[data-theme="dark"] .md-card.got.t3
   .medalm .md-desc{font-size:13px;margin-bottom:6px}
   .md-rew{gap:6px;margin-bottom:6px}.md-rew span{padding:3px 10px;font-size:14px}
 }
+
+/* ——— v3.5: ميداليات SVG احترافية ——— */
+.md-disc{background:none!important;border:0!important;box-shadow:none!important;border-radius:50%;width:64px;height:64px;animation:none;filter:drop-shadow(0 3px 3px rgba(40,30,80,.25))}
+.md-disc svg{width:100%;height:100%;display:block}
+.md-disc::after{inset:0;border-radius:50%;background:linear-gradient(115deg,transparent 38%,rgba(255,255,255,.55) 50%,transparent 62%)}
+.md-disc.lockd::after{display:none}
+.md-disc.lockd{filter:drop-shadow(0 2px 2px rgba(40,30,80,.15))}
+.md-disc.xs{width:24px;height:24px}.md-disc.sm{width:42px;height:42px}.md-disc.big{width:128px;height:128px}
+.md-more .md-disc.sm{width:38px;height:38px}
+.md-svg.prism{animation:mdHue 5s linear infinite}
+@keyframes mdHue{to{filter:hue-rotate(360deg)}}
+.md-ring{position:relative;display:grid;place-items:center;padding:6px;border-radius:50%}
+.md-ring::before{content:"";position:absolute;inset:0;border-radius:50%;background:conic-gradient(var(--rc) calc(var(--p) * 1%),rgba(120,120,150,.18) 0);
+  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 4px),#000 calc(100% - 3.5px));mask:radial-gradient(farthest-side,transparent calc(100% - 4px),#000 calc(100% - 3.5px))}
+.md-ring.none::before{display:none}
+.md-card .num{font-size:12px;color:var(--sub);font-weight:800;letter-spacing:.3px}
+.md-card:not(.got) b{color:var(--sub)}
+.md-card.got.t1{background:linear-gradient(170deg,rgba(208,139,76,.16),rgba(255,255,255,0) 60%),var(--card)}
+.md-card.got.t2{background:linear-gradient(170deg,rgba(150,165,190,.2),rgba(255,255,255,0) 60%),var(--card)}
+.md-card.got.t3{background:linear-gradient(170deg,rgba(248,198,43,.24),rgba(255,255,255,0) 60%),var(--card)}
+.md-card.got.t4{background:linear-gradient(170deg,rgba(162,116,247,.2),rgba(255,255,255,0) 60%),var(--card)}
+.md-card.got.t5{background:linear-gradient(170deg,rgba(201,139,255,.25),rgba(143,250,255,.12) 50%,rgba(255,255,255,0)),var(--card)}
+.md-card.got{border-color:rgba(255,200,60,.35)}
+.md-medal{width:128px;height:166px}
+.md-medal .rb{width:32px;height:70px;border-radius:2px;box-shadow:inset 0 -12px 10px -8px rgba(0,0,0,.35)}
+.md-medal .rb.l{left:30px;background:linear-gradient(90deg,var(--rbc) 0 32%,rgba(255,255,255,.92) 32% 44%,var(--rbc) 44% 56%,rgba(255,255,255,.92) 56% 68%,var(--rbc) 68%)}
+.md-medal .rb.r{right:30px;background:linear-gradient(90deg,var(--rbc) 0 32%,rgba(255,255,255,.92) 32% 44%,var(--rbc) 44% 56%,rgba(255,255,255,.92) 56% 68%,var(--rbc) 68%)}
+.md-sum>span{padding:4px 12px 4px 6px}
+.md-sum .md-disc.xs{width:26px;height:26px}
+.md-card.legend .md-ring{flex:none}

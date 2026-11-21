@@ -991,14 +991,35 @@
   const mDesc = m => (t('md')[m.id] || ['', ''])[1];
   const tierName = tr => t('medalTiers')[tr - 1] || '';
   const tierRank = tr => [0, 1, 2, 4, 3, 5][tr];          // السرية بين الفضية والذهبية
-  function medalDisc(m, tier, cls) {
-    const hide = m.secret && !tier;
-    return `<span class="md-disc t${tier || 0} ${cls || ''}"><i>${hide ? '?' : m.ic}</i></span>`;
+  // ——— رسم الميدالية (SVG): حافة مسنّنة معدنية + حلقة + مينا ملوّنة لكل ميدالية + رمز أبيض ———
+  const MD_COL = { flaw: '#0fa89a', sniper: '#e5484d', loyal: '#f2621a', mind: '#cf3d97', bolt: '#3e63dd', travel: '#2f9e64', perfect: '#ee9b00', collect: '#6e56cf', owl: '#2c2a73', stubborn: '#a15c28', edge: '#e2366f', dperf: '#8e4ec6', legend: '#17123f' };
+  const MD_ROSETTE = (() => { let d = ''; const n = 22; for (let i = 0; i < n * 2; i++) { const r = i % 2 ? 44.8 : 49.2, a = Math.PI * i / n - Math.PI / 2; d += (i ? 'L' : 'M') + (50 + r * Math.cos(a)).toFixed(1) + ' ' + (50 + r * Math.sin(a)).toFixed(1); } return d + 'Z'; })();
+  const mixHex = (h, to, k) => { const a = parseInt(h.slice(1), 16), b = parseInt(to.slice(1), 16); const c = sh => Math.round(((a >> sh) & 255) * (1 - k) + ((b >> sh) & 255) * k); return '#' + ((1 << 24) + (c(16) << 16) + (c(8) << 8) + c(0)).toString(16).slice(1); };
+  function medalSvg(m, tier, locked, o) {
+    o = o || {};
+    const unknown = !o.g && m.secret && locked;
+    const metal = locked ? 0 : tier;
+    let col = o.col || (unknown ? '#454a66' : MD_COL[m.id] || '#666');
+    if (locked && !unknown) col = mixHex(col, '#b9bdcc', 0.55);
+    const g = o.g || (unknown ? 'q' : m.id);
+    return `<svg class="md-svg${metal === 5 ? ' prism' : ''}" viewBox="0 0 100 100" aria-hidden="true" style="color:${col}">
+      <path d="${MD_ROSETTE}" fill="url(#mdm${metal})" stroke="rgba(0,0,0,.22)" stroke-width="1"/>
+      <circle cx="50" cy="50" r="41.5" fill="url(#mdm${metal})" stroke="rgba(0,0,0,.3)" stroke-width="1.4"/>
+      <circle cx="50" cy="50" r="38.6" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="1.3" stroke-dasharray="1.6 2.4"/>
+      <circle cx="50" cy="50" r="34" fill="${col}"/><circle cx="50" cy="50" r="34" fill="url(#mdshade)"/>
+      <circle cx="50" cy="50" r="34" fill="none" stroke="rgba(0,0,0,.32)" stroke-width="2.2"/>
+      <svg x="26" y="26" width="48" height="48" viewBox="0 0 24 24" opacity="${locked && !unknown ? 0.8 : 1}"><use href="#mg-${g}"/></svg>
+      <path d="M25 43a26 26 0 0 1 36-24" stroke="#fff" stroke-opacity=".38" stroke-width="5" stroke-linecap="round" fill="none"/>
+      ${locked && !unknown && !o.nolock ? '<g><circle cx="79" cy="79" r="14" fill="#2b2d42" stroke="#fff" stroke-width="3"/><rect x="72.5" y="78" width="13" height="9.5" rx="2" fill="#fff"/><path d="M75.2 78v-3.2a3.8 3.8 0 0 1 7.6 0V78" stroke="#fff" stroke-width="2.4" fill="none"/></g>' : ''}
+    </svg>`;
+  }
+  function medalDisc(m, tier, cls, locked) {
+    return `<span class="md-disc ${cls || ''}${locked ? ' lockd' : ''}">${medalSvg(m, tier, locked)}</span>`;
   }
   function medalMedal(m, tier) {
-    return `<div class="md-medal t${tier}"><i class="rb l"></i><i class="rb r"></i>${medalDisc(m, tier, 'big')}</div>`;
+    const locked = !tier, col = locked ? '#9aa0b4' : MD_COL[m.id] || '#888';
+    return `<div class="md-medal" style="--rbc:${col}"><i class="rb l"></i><i class="rb r"></i>${medalDisc(m, tier || 1, 'big', locked)}</div>`;
   }
-
   /** يحدّث العدّادات بعد الفوز */
   function medalWin(ms) {
     if (G.mode === 'zen' || G.mode === 'gift') return;
@@ -1110,20 +1131,25 @@
     const cnt = tr => MEDALS.filter(m => m.tiers && (S.med[m.id] || 0) >= tr).length;
     const sec = MEDALS.filter(m => m.secret && S.med[m.id]).length, nSec = MEDALS.filter(m => m.secret).length;
     $('md-sum').innerHTML = (S.med.legend ? `<span class="legend">💎 ${t('legendTitle')}</span>` : '')
-      + `<span><i class="e">🥇</i><b>${cnt(3)}</b></span><span><i class="e">🥈</i><b>${cnt(2)}</b></span><span><i class="e">🥉</i><b>${cnt(1)}</b></span><span><i class="e">🔮</i><b dir="ltr">${sec}/${nSec}</b></span>`;
+      + [[3, cnt(3), '#e0a100'], [2, cnt(2), '#8d99ad'], [1, cnt(1), '#b4692f']].map(([tr, n, c]) => `<span><span class="md-disc xs">${medalSvg({}, tr, false, { col: c, g: 'perfect' })}</span><b>${n}</b></span>`).join('')
+      + `<span><span class="md-disc xs">${medalSvg({}, 4, false, { col: '#5b2fb0', g: 'q' })}</span><b dir="ltr">${sec}/${nSec}</b></span>`;
     $('md-grid').innerHTML = MEDALS.map((m, i) => {
       const e = S.med[m.id] || 0;
       const tierShow = m.tiers ? e : e ? (m.legend ? 5 : 4) : 0;
       let prog = '';
       if (m.tiers) {
         if (e >= 3) prog = `<small class="done">✓ ${t('medalDone')}</small>`;
-        else { const need = tiersOf(m)[e], v = Math.min(need, m.cur ? m.cur() : m.v()); prog = `<span class="md-bar"><i style="width:${Math.round(100 * v / need)}%"></i></span><small dir="ltr">${v}/${need}</small>`; }
+        else { const need = tiersOf(m)[e], v = Math.min(need, m.cur ? m.cur() : m.v()); prog = `<small dir="ltr" class="num">${v} / ${need}</small>`; }
         prog = `<span class="md-pips">${[1, 2, 3].map(k => `<i class="${e >= k ? 'on p' + k : ''}"></i>`).join('')}</span>` + prog;
       } else if (e) prog = `<small class="done">✓ ${tierName(tierShow)}</small>`;
       else if (m.secret) prog = `<small>${t('medalSecretSub')}</small>`;
-      else { const v = Math.min(m.goal, m.v()); prog = `<span class="md-bar"><i style="width:${Math.round(100 * v / m.goal)}%"></i></span><small dir="ltr">${v}/${m.goal}</small>`; }
+      else { const v = Math.min(m.goal, m.v()); prog = `<span class="md-bar"><i style="width:${Math.round(100 * v / m.goal)}%"></i></span><small dir="ltr" class="num">${v} / ${m.goal}</small>`; }
       const nm = m.secret && !e ? t('medalSecret') : mName(m);
-      return `<button class="md-card ${tierShow ? 'got t' + tierShow : ''} ${m.legend ? 'legend' : ''}" data-md="${i}">${medalDisc(m, tierShow)}<b>${nm}</b>${prog}</button>`;
+      let pct = 0, rc = '';
+      if (m.tiers && e < 3) { const need = tiersOf(m)[e], v = m.cur ? m.cur() : m.v(); pct = Math.min(100, Math.round(100 * v / need)); rc = ['#cf8a4c', '#9aa6b8', '#f2b400'][e]; }
+      else if (m.legend && !e) { pct = Math.round(100 * Math.min(m.goal, m.v()) / m.goal); rc = '#c98bff'; }
+      const disc = medalDisc(m, tierShow || (m.legend ? 5 : m.secret ? 4 : 1), '', !tierShow);
+      return `<button class="md-card ${tierShow ? 'got t' + tierShow : ''} ${m.legend ? 'legend' : ''}" data-md="${i}"><span class="md-ring${rc ? '' : ' none'}" style="--p:${pct};--rc:${rc || 'transparent'}">${disc}</span><b>${nm}</b>${prog}</button>`;
     }).join('');
     $('md-grid').querySelectorAll('[data-md]').forEach(b => b.addEventListener('click', () => { Sound.click(); medalInfo(MEDALS[+b.dataset.md]); }));
   }
