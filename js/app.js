@@ -974,7 +974,7 @@
   const mp = k => S.mp[k] || 0;
   const MEDALS = [
     { id: 'flaw', ic: '✨', tiers: [5, 15, 30], v: () => mp('flawBest'), cur: () => mp('flawRun') },
-    { id: 'sniper', ic: '🎯', tiers: [20, 35, 50], v: () => mp('arrowBest') },
+    { id: 'sniper', ic: '🎯', tiers: [20, 40, 60], v: () => mp('arrowBest') },
     { id: 'loyal', ic: '🔥', tiers: [7, 30, 100], v: () => Math.max(mp('dailyBest'), S.daily.last === today() || S.daily.last === yesterday() ? S.daily.streak || 0 : 0) },
     { id: 'mind', ic: '🧠', tiers: [5, 20, 50], v: () => mp('noHelp') },
     { id: 'bolt', ic: '⚡', tiers: [1, 5, 20], v: () => mp('bolt') },

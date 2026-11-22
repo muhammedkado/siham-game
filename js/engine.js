@@ -190,7 +190,8 @@
       const tol = Math.max(0.72, 16 / v.s);
       if (!cand.length || cand[0].d > tol) return;
       // حماية من اللمس الخاطئ: إذا كان سهمان قريبين جداً والرقعة صغيرة، نكبّر بدل المخاطرة بقلب
-      if (this.safeTap !== false && cand.length > 1 && v.s < 26 && (cand[1].d - cand[0].d) < 0.28 && !this.lensArmed) {
+      // على الرقع الكبيرة كتير (خانة أصغر من 12px) الحماية شغّالة دائماً، لأن الإصبع أعرض من السهم
+      if ((this.safeTap !== false ? v.s < 26 : v.s < 12) && cand.length > 1 && (cand[1].d - cand[0].d) < 0.28 && !this.lensArmed) {
         this.zoomAt(px, py, 40);
         if (this.h.onAutoZoom) this.h.onAutoZoom();
         return;

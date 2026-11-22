@@ -64,8 +64,9 @@
     const same = params.lock ? (a, b) => col[a] === col[b] : () => true;
     const R = rng(seed);
     const occ = new Int32Array(W * H).fill(-1);
-    // rayMax[c] = أكبر رقم سهم يمر طريق خروجه بالخانة c
-    const rayMax = new Int32Array(W * H).fill(-1);
+    // rayMax[c] = أكبر "ترتيب" سهم يمر طريق خروجه بالخانة c (الترتيب الأعلى = بيطلع أول)
+    const rayMax = new Float64Array(W * H).fill(-1);
+    const ord = [];   // ترتيب كل سهم: = رقمه للأسهم العادية، وكسر بين رقمين لأسهم سدّ الفراغات
     const arrows = [];
     const inG = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
 
@@ -86,7 +87,7 @@
         if (rayOwners) for (const o of rayOwners[c]) blocked[o] = 1;
       }
       for (const c of ray) { rayMax[c] = id; if (rayOwners) rayOwners[c].push(id); }
-      arrows.push({ id, cells, dir: d });
+      arrows.push({ id, cells, dir: d }); ord[id] = id;
       blocked[id] = 0;
       return true;
     }
@@ -202,10 +203,10 @@
           const tl = a.cells[0];
           // بالأسهم المستقيمة: الذيل يكبر بنفس الخط بس
           const inLine = !params.straightOnly || (cx === nx - DIRS[a.dir][0] && cy === ny - DIRS[a.dir][1]);
-          if (tl === ny * W + nx && inLine && rayMax[c] < o && same(c, tl)) opts.push([a, 0]);
+          if (tl === ny * W + nx && inLine && rayMax[c] < ord[o] && same(c, tl)) opts.push([a, 0]);
           // رأس: السهم يتقدم خانة لقدام بطريقه، آمن إذا ما في سهم لاحق طريقه بيمر فيها
           const hd = a.cells[a.cells.length - 1];
-          if (params.head !== false && hd === ny * W + nx && cx === nx + DIRS[a.dir][0] && cy === ny + DIRS[a.dir][1] && rayMax[c] === o && same(c, hd)) opts.push([a, 1]);
+          if (params.head !== false && hd === ny * W + nx && cx === nx + DIRS[a.dir][0] && cy === ny + DIRS[a.dir][1] && rayMax[c] === ord[o] && same(c, hd)) opts.push([a, 1]);
         }
         if (!opts.length) continue;
         const [a, isHead] = opts[Math.floor(R() * opts.length)];
@@ -215,11 +216,60 @@
       return grown;
     }
 
+    /* سدّ الفراغات: سهم جديد بخانات فاضية، "مدسوس" بين سهمين بترتيب الحل.
+     * m = أكبر ترتيب لسهم طريقه بيمر بخانات السهم الجديد (لازم يطلع الجديد قبله)
+     * b = أصغر ترتيب لسهم قاعد على طريق الجديد (لازم يطلع قبل الجديد)
+     * الحل بيضل مضمون إذا b > m، والجديد بياخد ترتيب بالنص. وإذا طريقه مسدود (b محدود) ما بيكون حر من البداية. */
+    function plugPass(allowFree) {
+      let added = 0;
+      shuffle(cells, R);
+      for (const h of cells) {
+        if (occ[h] >= 0) continue;
+        const hx = h % W, hy = (h / W) | 0;
+        let best = null;
+        for (const d of shuffle([0, 1, 2, 3], R)) {
+          const [dx, dy] = DIRS[d];
+          const ray = []; let b = Infinity;
+          for (let x = hx + dx, y = hy + dy; inG(x, y); x += dx, y += dy) { const i = y * W + x; ray.push(i); if (occ[i] >= 0) b = Math.min(b, ord[occ[i]]); }
+          if (b === Infinity && !allowFree) continue;
+          let m = rayMax[h];
+          if (m >= b) continue;
+          const raySet = new Set(ray), path = [h], used = new Set(path);
+          let px = hx, py = hy, wd = (d + 2) % 4;
+          const L = params.plugLen ? 2 + Math.floor(R() * (params.plugLen - 1)) : sampleLen();
+          while (path.length < L) {
+            const left = (wd + 3) % 4, right = (wd + 1) % 4, lr = R() < 0.5 ? [left, right] : [right, left];
+            const order = path.length === 1 ? [wd] : R() < params.straight ? [wd, lr[0], lr[1]] : [lr[0], lr[1], wd];
+            let moved = false;
+            for (const nd of order) {
+              const nx = px + DIRS[nd][0], ny = py + DIRS[nd][1];
+              if (!inG(nx, ny)) continue;
+              const ni = ny * W + nx;
+              if (!mask[ni] || occ[ni] >= 0 || used.has(ni) || raySet.has(ni) || !same(ni, h) || Math.max(m, rayMax[ni]) >= b) continue;
+              m = Math.max(m, rayMax[ni]); path.push(ni); used.add(ni); px = nx; py = ny; wd = nd; moved = true; break;
+            }
+            if (!moved) break;
+          }
+          if (path.length < 2) continue;
+          const sc = (b === Infinity ? 0 : 20) + path.length + R();
+          if (!best || sc > best.sc) best = { sc, path, ray, b, m, d };
+        }
+        if (!best) continue;
+        const id = arrows.length, o = best.b === Infinity ? best.m + 0.5 : (best.m + best.b) / 2;
+        for (const c of best.path) occ[c] = id;
+        for (const c of best.ray) if (rayMax[c] < o) rayMax[c] = o;
+        arrows.push({ id, cells: best.path.slice().reverse(), dir: best.d }); ord[id] = o;
+        added++;
+      }
+      return added;
+    }
+
     const cells = [];
     for (let i = 0; i < W * H; i++) if (mask[i]) cells.push(i);
     if (params.chain) {
       chainFill();
       for (let e = 0; e < 40; e++) if (!extendPass()) break;
+      if (params.plug) for (let r = 0; r < 6; r++) { const a = plugPass(false); const g = extendPass(); if (!a && !g) break; }
       if (!params.rest) return arrows;
     }
     // من الداخل للخارج: الخانات العميقة تاخد أسهمها أولاً (طرقها لسا فاضية)، فالرسمة تتعبى كلها
@@ -375,19 +425,19 @@
     const round = Math.floor(k / pics.length);
     const pic = pics[k % pics.length];
     const boss = n >= 10 && n % 10 === 0;
-    // الرقعة بتكبر: 14 ← 36 خانة، وبعد الجولة الأولى بتتراوح 30–36
-    let w = Math.min(36, Math.round(14 + k * 0.36));
-    if (round >= 2) w = 30 + (seed % 7);
-    if (boss) w = Math.min(36, w + 3);
+    // الرقعة بتكبر تدريجياً: 14 ← 36 خانة لحد المرحلة 65، وبعدها أبطأ لحد 48 خانة (المرحلة ~200)
+    let w = k <= 61 ? 14 + k * 0.36 : 36 + (k - 61) * 0.09;
+    if (k > 61) w += (seed % 5) - 2;          // تنويع خفيف بين المراحل
+    w = Math.min(48, Math.round(w));
+    if (boss) w = Math.min(50, w + 3);
     const base = Object.assign({ n, pic: pic.id, w, mirror: round % 2 === 1, seed }, arrowParams(w, k));
     if (n < 8) return Object.assign(base, { tension: 2, inside: 2, diff: 'normal' });
-    const chain = { chain: 30, rest: true, tension: 2, inside: 2, tries: w > 30 ? 3 : 4 };
-    // ذيول أطول على الرقع الكبيرة = تعبئة أحسن وأسهم حرة أقل
-    const ext = Math.max(14, Math.round(w * 0.9));
-    if (boss) return Object.assign(base, chain, { cap: 2, relax: 4, rest: false, maxExt: ext, boss: true, diff: 'insane' });
-    if (n < 20) return Object.assign(base, chain, { cap: 4, relax: 8, maxExt: 14, diff: 'hard' });
-    if (n < 50) return Object.assign(base, chain, { cap: 3, relax: 6, maxExt: ext, diff: 'expert' });
-    return Object.assign(base, chain, { cap: 2, relax: 6, rest: false, maxExt: ext, diff: 'expert' });
+    // سلسلة (قليل أسهم حرة) + سدّ الفراغات (الرسمة بتتعبى وعدد الأسهم بيكبر كتير مع المراحل)
+    const chain = { chain: w > 38 ? 60 : 30, plug: true, tension: 2, inside: 2, tries: w > 30 ? 3 : 4 };
+    if (boss) return Object.assign(base, chain, { cap: 2, relax: 4, maxExt: 12, plugLen: 5, boss: true, diff: 'insane' });
+    if (n < 20) return Object.assign(base, chain, { cap: 4, relax: 8, maxExt: 14, plugLen: 7, diff: 'hard' });
+    if (n < 50) return Object.assign(base, chain, { cap: 3, relax: 6, maxExt: 14, plugLen: 6, diff: 'expert' });
+    return Object.assign(base, chain, { cap: 2, relax: 6, maxExt: 12, plugLen: 5, diff: 'expert' });
   }
 
   function dailySpec(dateStr) {
