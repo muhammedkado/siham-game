@@ -77,7 +77,7 @@
     }
 
     // لوضع "السلسلة": مين من الأسهم طريقه بيمر بكل خانة، ومين لسا ما في شي سادد طريقه
-    const rayOwners = params.chain ? Array.from({ length: W * H }, () => []) : null;
+    const rayOwners = params.chain || params.tension ? Array.from({ length: W * H }, () => []) : null;
     const blocked = [];
     function commit(cells, ray, d) {
       const id = arrows.length;
@@ -139,6 +139,7 @@
      * "الحرة" حتى الآن. بما إن الحل = عكس ترتيب الوضع، اللاعب يلاقي بأي لحظة سهم أو سهمين بس يقدر يحركهم. */
     function chainFill() {
       const k = params.chain;            // قوة السلسلة: عدد المرشحين لكل سهم
+      let cap = params.cap;              // سقف الأسهم الحرة (بيرتخي شوي إذا علقنا، كي تتعبى الرسمة)
       for (let guard = 0; guard < W * H; guard++) {
         const free = [];
         for (let a = 0; a < arrows.length; a++) if (!blocked[a]) free.push(a);
@@ -165,17 +166,17 @@
             for (const c of p.cells) for (const o of rayOwners[c]) if (!blocked[o]) hit.add(o);
             // طريقه لازم يمرّ بخانات فاضية من الرسمة، وإلا بيضل حر للأبد (رأسه عالحافة لبرّا)
             // سقف الأسهم الحرة: سهم بيزيدهم فوق السقف ما بينحط (الخانات الباقية بتكبر فيها ذيول الأسهم)
-            if (params.cap && free.length - hit.size + 1 > params.cap) continue;
+            if (cap && free.length - hit.size + 1 > cap) continue;
             const own = new Set(p.cells); let open = 0;
             for (const c of p.ray) if (mask[c] && occ[c] < 0 && !own.has(c)) open++;
-            if (params.cap && !open && free.length - hit.size >= 1) continue;   // حر للأبد + في غيره حر = ممنوع
+            if (cap === params.cap && !open && free.length - hit.size >= 1) continue;   // حر للأبد + في غيره حر = ممنوع
             // الأفضل: يسد كل الحرّين (يبقى هو الحر الوحيد)، وطريقه قابل للسد، وبعدين الأطول
             const sc = hit.size * 10 - (free.length - hit.size) * 25 - (open ? 0 : 60) + Math.min(open, 12) * 1.5 + p.cells.length * 0.3 + R() * 2;
             tried++;
             if (!best || sc > best.sc) best = { sc, p, d };
           }
         }
-        if (!best) break;
+        if (!best) { if (params.relax && cap < params.relax) { cap++; continue; } break; }
         commit(best.p.cells, best.p.ray, best.d);
       }
     }
@@ -219,7 +220,7 @@
     if (params.chain) {
       chainFill();
       for (let e = 0; e < 40; e++) if (!extendPass()) break;
-      return arrows;
+      if (!params.rest) return arrows;
     }
     // من الداخل للخارج: الخانات العميقة تاخد أسهمها أولاً (طرقها لسا فاضية)، فالرسمة تتعبى كلها
     let depth = null;
@@ -241,7 +242,20 @@
         const dirs = shuffle([0, 1, 2, 3], R);
         const L = pass < 3 ? sampleLen() : 2 + Math.floor(R() * 3);
         let ok = false;
-        for (const d of dirs) { if (tryPlace(h, d, L, false)) { placed++; ok = true; break; } }
+        if (params.tension) {
+          // التوتر: من بين الاتجاهات الممكنة، اختار يلي جسمه بيسدّ طريق أكبر عدد من الأسهم الحرة
+          let best = null;
+          for (const d of dirs) {
+            const p = plan(h, d, L, false); if (!p) continue;
+            const hit = new Set();
+            for (const c of p.cells) for (const o of rayOwners[c]) if (!blocked[o]) hit.add(o);
+            let open = 0; const own = new Set(p.cells);
+            for (const c of p.ray) if (mask[c] && occ[c] < 0 && !own.has(c)) { open = 1; break; }
+            const sc = hit.size * params.tension + open * 0.8 + R() * 0.5;
+            if (!best || sc > best.sc) best = { sc, p, d };
+          }
+          if (best) { commit(best.p.cells, best.p.ray, best.d); placed++; ok = true; }
+        } else for (const d of dirs) { if (tryPlace(h, d, L, false)) { placed++; ok = true; break; } }
         if (!ok && params.single && pass >= (params.singleFrom == null ? 2 : params.singleFrom)) for (const d of dirs) { if (tryPlace(h, d, 1, true)) { placed++; break; } }
       }
       const grown = pass >= 1 ? extendPass() + extendPass() : 0;
@@ -347,19 +361,33 @@
     };
   }
 
+  /* منحنى الصعوبة (v3.8): المقياس الحقيقي للصعوبة هو كم سهم بيقدر يتحرك بكل لحظة.
+   * القديم كان ~10 أسهم حرة دائماً (اللاعب بيكبس أي شي). هلق:
+   * 4–7 دافئة (توتر خفيف) ← 8–19 صعبة (سقف 4) ← 20–49 خبير (سقف 3) ← 50+ سقف 2،
+   * وكل مرحلة عاشرة "زعيم": سقف 2 صارم ورقعة أكبر. والرقعة نفسها بتكبر مع التقدّم لحد 36 خانة. */
   function levelSpec(n) {
     const seed = hashStr('siham-level-' + n);
-    if (n === 1) return { n, pic: 'gem', f: 1, minLen: 2, maxLen: 3, straight: 0.8, seed, tries: 6 };
-    if (n === 2) return { n, pic: 'leaf', f: 1, minLen: 2, maxLen: 4, straight: 0.6, seed, tries: 6 };
-    if (n === 3) return { n, pic: 'smile', f: 1, minLen: 2, maxLen: 5, straight: 0.6, seed, tries: 6 };
+    if (n === 1) return { n, pic: 'gem', f: 1, minLen: 2, maxLen: 3, straight: 0.8, seed, tries: 6, diff: 'easy' };
+    if (n === 2) return { n, pic: 'leaf', f: 1, minLen: 2, maxLen: 4, straight: 0.6, seed, tries: 6, diff: 'easy' };
+    if (n === 3) return { n, pic: 'smile', f: 1, minLen: 2, maxLen: 5, straight: 0.6, seed, tries: 6, diff: 'easy' };
     const pics = mainPics();
     const k = n - 4;
     const round = Math.floor(k / pics.length);
     const pic = pics[k % pics.length];
-    // الدقة (عرض الرقعة بالخانات) تكبر تدريجياً: 12 ← 30
-    let w = Math.min(30, Math.round(16 + k * 0.4));
-    if (round >= 2) w = 26 + (seed % 5);
-    return Object.assign({ n, pic: pic.id, w, mirror: round % 2 === 1, seed }, arrowParams(w, k));
+    const boss = n >= 10 && n % 10 === 0;
+    // الرقعة بتكبر: 14 ← 36 خانة، وبعد الجولة الأولى بتتراوح 30–36
+    let w = Math.min(36, Math.round(14 + k * 0.36));
+    if (round >= 2) w = 30 + (seed % 7);
+    if (boss) w = Math.min(36, w + 3);
+    const base = Object.assign({ n, pic: pic.id, w, mirror: round % 2 === 1, seed }, arrowParams(w, k));
+    if (n < 8) return Object.assign(base, { tension: 2, inside: 2, diff: 'normal' });
+    const chain = { chain: 30, rest: true, tension: 2, inside: 2, tries: w > 30 ? 3 : 4 };
+    // ذيول أطول على الرقع الكبيرة = تعبئة أحسن وأسهم حرة أقل
+    const ext = Math.max(14, Math.round(w * 0.9));
+    if (boss) return Object.assign(base, chain, { cap: 2, relax: 4, rest: false, maxExt: ext, boss: true, diff: 'insane' });
+    if (n < 20) return Object.assign(base, chain, { cap: 4, relax: 8, maxExt: 14, diff: 'hard' });
+    if (n < 50) return Object.assign(base, chain, { cap: 3, relax: 6, maxExt: ext, diff: 'expert' });
+    return Object.assign(base, chain, { cap: 2, relax: 6, rest: false, maxExt: ext, diff: 'expert' });
   }
 
   function dailySpec(dateStr) {

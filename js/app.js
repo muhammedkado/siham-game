@@ -355,6 +355,7 @@
     $('g-title').textContent = t('level') + ' ' + n;
     const tips = { 1: 'coach1', 3: 'coach3', 4: 'coach4', 5: 'coach5' };
     if (tips[n] && !S.seen[tips[n]]) { S.seen[tips[n]] = 1; save(); setTimeout(() => coach(t(tips[n])), 350); }
+    else if (G.level.spec.boss) setTimeout(() => { if (current === 'game' && G.mode === 'journey' && G.n === n) nudgeShow(t('bossLv'), '🔥', true); }, 400);
   }
   function startPack(i) {
     const pic = Gen.packPics()[i];
@@ -405,13 +406,13 @@
     }, 450);
     idleArm();
     const cells = level.mask.reduce((a, b) => a + b, 0);
-    const diff = Gen.difficultyOf(level.art ? level.arrows.length * 3.5 : cells);
+    const diff = (level.spec && level.spec.diff) || Gen.difficultyOf(level.art ? level.arrows.length * 3.5 : cells);
     $('g-diff').textContent = zen ? '🍃' : t(diff);
     G.diff = zen ? null : diff;
     // موسيقى هادئة أو حماسية حسب المرحلة
     G.style = zen || G.mode === 'pack' || G.mode === 'gift' ? 'calm'
       : G.mode === 'daily' ? 'hype'
-      : (diff === 'hard' || diff === 'expert' || (G.n > 3 && G.n % 5 === 0)) ? 'hype' : 'calm';
+      : (diff === 'hard' || diff === 'expert' || diff === 'insane' || (G.n > 3 && G.n % 5 === 0)) ? 'hype' : 'calm';
     G.seed = level.spec.seed;
     Music.start(G.style, G.seed);
     updateHud(); updateTools();
@@ -973,7 +974,7 @@
   const mp = k => S.mp[k] || 0;
   const MEDALS = [
     { id: 'flaw', ic: '✨', tiers: [5, 15, 30], v: () => mp('flawBest'), cur: () => mp('flawRun') },
-    { id: 'sniper', ic: '🎯', tiers: [20, 40, 60], v: () => mp('arrowBest') },
+    { id: 'sniper', ic: '🎯', tiers: [20, 35, 50], v: () => mp('arrowBest') },
     { id: 'loyal', ic: '🔥', tiers: [7, 30, 100], v: () => Math.max(mp('dailyBest'), S.daily.last === today() || S.daily.last === yesterday() ? S.daily.streak || 0 : 0) },
     { id: 'mind', ic: '🧠', tiers: [5, 20, 50], v: () => mp('noHelp') },
     { id: 'bolt', ic: '⚡', tiers: [1, 5, 20], v: () => mp('bolt') },
@@ -1077,8 +1078,8 @@
   function medalWin(ms) {
     if (G.mode === 'zen' || G.mode === 'gift') return;
     const M = S.mp, flawless = engine.mistakes === 0 && !G.usedChance, big = engine.total >= 30;
-    const hard = G.diff === 'hard' || G.diff === 'expert';
-    M.arrowBest = Math.max(M.arrowBest || 0, G.best || 0);
+    const hard = G.diff === 'hard' || G.diff === 'expert' || G.diff === 'insane';
+    if (G.mode === 'journey' || G.mode === 'daily') M.arrowBest = Math.max(M.arrowBest || 0, G.best || 0);
     if (big) {
       if (flawless) { M.flawRun = (M.flawRun || 0) + 1; M.flawBest = Math.max(M.flawBest || 0, M.flawRun); }
       else M.flawRun = 0;
@@ -1097,7 +1098,7 @@
     if (G.mode === 'zen' || G.mode === 'gift') return;
     const M = S.mp, key = medalKey();
     M.flawRun = 0;
-    M.arrowBest = Math.max(M.arrowBest || 0, G.best || 0);
+    if (G.mode === 'journey' || G.mode === 'daily') M.arrowBest = Math.max(M.arrowBest || 0, G.best || 0);
     M.lz = M.lz && M.lz.k === key ? { k: key, c: M.lz.c + 1 } : { k: key, c: 1 };
     save();
   }
