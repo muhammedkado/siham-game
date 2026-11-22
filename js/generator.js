@@ -436,6 +436,10 @@
     const chain = { chain: w > 38 ? 60 : 30, plug: true, tension: 2, inside: 2, tries: w > 30 ? 3 : 4 };
     if (boss) return Object.assign(base, chain, { cap: 2, relax: 4, maxExt: 12, plugLen: 5, boss: true, diff: 'insane' });
     if (n < 20) return Object.assign(base, chain, { cap: 4, relax: 8, maxExt: 14, plugLen: 7, diff: 'hard' });
+    // منشار الصعوبة (متل المنافسين): أول مرحلتين بعد الزعيم استراحة، و7–9 قبل الزعيم أصعب
+    const pos = n % 10;
+    if (pos === 1 || pos === 2) { const bw = Math.max(18, w - 6); return Object.assign(base, arrowParams(bw, k), { w: bw, tension: 2, inside: 2, diff: 'normal' }); }
+    if (pos >= 7) return Object.assign(base, chain, { w: Math.min(48, w + 2), cap: 2, relax: 4, maxExt: 12, plugLen: 5, diff: 'expert' });
     if (n < 50) return Object.assign(base, chain, { cap: 3, relax: 6, maxExt: 14, plugLen: 6, diff: 'expert' });
     return Object.assign(base, chain, { cap: 2, relax: 6, maxExt: 12, plugLen: 5, diff: 'expert' });
   }
