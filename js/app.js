@@ -1388,7 +1388,7 @@
     cloudPush();
   }
 
-  const AE = { 'auth/invalid-email': 'aeEmail', 'auth/missing-email': 'aeEmail', 'auth/wrong-password': 'aePass', 'auth/invalid-credential': 'aePass', 'auth/invalid-login-credentials': 'aePass', 'auth/user-not-found': 'aePass', 'auth/missing-password': 'aeWeak', 'auth/email-already-in-use': 'aeExists', 'auth/weak-password': 'aeWeak', 'auth/network-request-failed': 'aeNet', 'auth/too-many-requests': 'aeMany', 'auth/operation-not-allowed': 'aeOff', 'auth/unauthorized-domain': 'aeOff', 'auth/popup-blocked': 'aePopup' };
+  const AE = { 'auth/invalid-email': 'aeEmail', 'auth/missing-email': 'aeEmail', 'auth/wrong-password': 'aePass', 'auth/invalid-credential': 'aePass', 'auth/invalid-login-credentials': 'aePass', 'auth/user-not-found': 'aePass', 'auth/missing-password': 'aeWeak', 'auth/email-already-in-use': 'aeExists', 'auth/weak-password': 'aeWeak', 'auth/network-request-failed': 'aeNet', 'auth/too-many-requests': 'aeMany', 'auth/operation-not-allowed': 'aeOff', 'auth/unauthorized-domain': 'aeOff', 'auth/popup-blocked': 'aePopup', 'auth/user-mismatch': 'aeMismatch' };
   function accountModal(intro) {
     const u = CU(), on = !!(window.Cloud && Cloud.ok);
     const guestUser = !u || u.anon;
@@ -1404,7 +1404,8 @@
     modal(`<h3>${guestUser ? t('saveProgress') : t('account')}</h3>
       ${guestUser ? `<p>${intro ? t('saveNudge') : t('saveProgressSub')}</p>` : ''}
       ${prof}${body}
-      <div class="m-actions">${guestUser ? '' : `<button class="btn" data-a="out" style="color:var(--danger)">${t('signOut')}</button>`}<button class="btn" data-a="close">${guestUser ? t('later') : t('done')}</button></div>`, {
+      <div class="m-actions">${guestUser ? '' : `<button class="btn" data-a="out" style="color:var(--danger)">${t('signOut')}</button>`}<button class="btn" data-a="close">${guestUser ? t('later') : t('done')}</button></div>
+      ${on && u ? `<button class="ac-link ac-del" data-a="del">${t('delAcc')}</button>` : ''}`, {
       close: () => { saveProf(); closeModal(); },
       google: () => run(() => Cloud.google()),
       in: () => creds(Cloud.signIn),
@@ -1421,6 +1422,29 @@
           applyStyle(); closeModal(); show('home');
         },
       }),
+      // حذف الحساب: إعادة تحقق (Google/كلمة المرور) ← حذف السحابة والحساب ← مسح التقدم المحلي ← ضيف جديد
+      del: () => {
+        saveProf();
+        const kind = Cloud.reauthKind();
+        modal(`<h3>🗑️</h3><p>${t('delQ')}</p>
+          ${kind === 'password' ? `<input id="ac-pass" type="password" dir="ltr" autocomplete="current-password" placeholder="${t('delPw')}">` : ''}
+          <p class="ac-err" id="ac-err"></p>
+          <div class="m-actions"><button class="btn" data-a="yes" style="color:var(--danger)">${t('delYes')}</button><button class="btn primary" data-a="no">${t('no')}</button></div>`, {
+          no: () => accountModal(),
+          yes: () => {
+            const pw = $('ac-pass') ? $('ac-pass').value : '';
+            if (kind === 'password' && pw.length < 6) return err('aePass');
+            run(async () => {
+              await Cloud.reauth(pw);
+              await Cloud.deleteAccount();
+              const set = S.set, gf = S.gifts; S = fresh(); S.set = set; S.gifts = gf; S.prof.a = Math.floor(Math.random() * 24);
+              cloudUid = null; lastPub = '';
+              try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignore */ }
+              await Cloud.signOut().catch(() => {});
+            }, () => { applyStyle(); closeModal(); show('home'); toast(t('delDone'), 3500); });
+          },
+        });
+      },
     }, { acct: 1 });
     const card = $('modal-card');
     card.querySelectorAll('[data-av]').forEach(b => b.addEventListener('click', () => {

@@ -105,6 +105,54 @@
     reset(email) { return auth.sendPasswordResetEmail(email); },
     async signOut() { signingOut = true; try { await auth.signOut(); } finally { signingOut = false; } user = null; guest(); },
 
+    // ——— حذف الحساب (شرط Google Play): كل البيانات في السحابة + حساب الدخول نفسه ———
+    /** نوع إعادة التحقق المطلوبة قبل الحذف: google | password | null (ضيف) */
+    reauthKind() {
+      const u = auth && auth.currentUser;
+      if (!u || u.isAnonymous) return null;
+      return u.providerData.some(p => p && p.providerId === 'google.com') ? 'google' : 'password';
+    },
+    /** Firebase يشترط تسجيل دخول حديث لحذف الحساب */
+    async reauth(pw) {
+      const u = auth.currentUser, kind = Cloud.reauthKind();
+      if (kind === 'password') return u.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(u.email, pw));
+      if (kind !== 'google') return;
+      if (NATIVE && NATIVE.googleSignIn) {
+        const tk = await new Promise((ok, no) => { gWait = { ok, no }; NATIVE.googleSignIn(); });
+        return u.reauthenticateWithCredential(firebase.auth.GoogleAuthProvider.credential(tk));
+      }
+      const p = new firebase.auth.GoogleAuthProvider();
+      p.setCustomParameters({ prompt: 'select_account' });
+      return u.reauthenticateWithPopup(p);
+    },
+    /** يحذف التقدم وكل صفوف لوحات الصدارة ثم حساب الدخول.
+     *  بعد النجاح لا يُنشأ ضيف جديد حتى تمسح اللعبة تقدمها المحلي وتستدعي signOut (وإلا يُرفع التقدم القديم من جديد) */
+    async deleteAccount() {
+      const u = auth && auth.currentUser;
+      if (!u) return;
+      const tk = await u.getIdToken(true), uid = u.uid;
+      // صفوف الأسابيع والأيام: كل يوم منذ إطلاق لوحات الصدارة (حذف مستند غير موجود لا يضر)
+      const names = ['users/' + uid, 'board/' + uid], iso = t => new Date(t).toISOString().slice(0, 10);
+      for (let t = Date.UTC(2026, 10, 1), end = Date.now() + 2 * 864e5; t <= end; t += 864e5) {
+        names.push('days/' + iso(t) + '/p/' + uid);
+        if (new Date(t).getUTCDay() === 1) names.push('weeks/' + iso(t) + '/p/' + uid);
+      }
+      const base = 'projects/' + CFG.projectId + '/databases/(default)/documents/';
+      for (let i = 0; i < names.length; i += 400) {
+        const r = await fetch(DOCS + ':commit', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk },
+          body: JSON.stringify({ writes: names.slice(i, i + 400).map(n => ({ delete: base + n })) }),
+        });
+        if (!r.ok) throw new Error('firestore ' + r.status);
+      }
+      signingOut = true;   // يبقى مفعّلاً حتى signOut
+      try {
+        try { await u.delete(); }
+        catch (e) { if (!u.isAnonymous) throw e; await auth.signOut(); }   // حساب ضيف بلا بيانات شخصية: يكفي الخروج
+      } catch (e) { signingOut = false; throw e; }
+      user = null;
+    },
+
     // ——— البيانات ———
     async load() { if (!user) return null; const d = await req('GET', '/users/' + user.uid); return d ? dec(d.fields).save || null : null; },
     save(json) { return user ? put('/users/' + user.uid, { save: json, v: Date.now() }) : Promise.resolve(); },
