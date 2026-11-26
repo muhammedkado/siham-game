@@ -10,6 +10,13 @@
   const easeOut = t => 1 - Math.pow(1 - t, 3);
   const HOT = ['#3b82f6', '#9b5de5', '#ff7a1a'];   // ألوان الأسهم أثناء السلسلة
   const easeInOut = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  // العناصر الخاصة: برق (ينطلق لحاله) وقنبلة (نايمة / مشتعلة / عالآخر / منفجرة)
+  const ZAP = '#ffc400';
+  // أبيض بحافة كهرمانية: بيتميّز عن كل ستايلات الأسهم (حتى الذهبي والحلوى يلي فيهم أصفر)
+  const BOLT_C = { b: '#fffdf2', e: '#f59e0b', h: '#ffffff' }, BOLT_GLOW = '#ffc400', BOLT_INK = '#f59e0b';
+  const BOMB_C = { b: '#5b5f7a', e: '#23253a', h: '#b9bdd6' }, BOMB_LIT = { b: '#be123c', e: '#4c0519', h: '#ffb3c1' };
+  const BOMB_HOT = { b: '#ff5a6e', e: '#7f1028', h: '#ffe4e8' }, BURNT_C = { b: '#8d91a3', e: '#4a4d5c', h: '#c9ccd8' };
+  const BOLT_GLYPH = [[13.5, 1.5], [4, 13.5], [10.5, 13.5], [9.5, 22.5], [20, 9.5], [13.2, 9.5]];
 
   class Engine {
     constructor(canvas, hooks) {
@@ -43,8 +50,13 @@
       this.occ = new Int32Array(W * H).fill(-1);
       this.arrows = level.arrows.map(a => {
         const pts = a.cells.map(c => [(c % W) + 0.5, ((c / W) | 0) + 0.5]);
-        return { id: a.id, cells: a.cells, dir: a.dir, pts, alive: true, busy: false, cols: a.cells.map(c => level.color[c] || '#8890a0') };
+        return { id: a.id, cells: a.cells, dir: a.dir, pts, alive: true, busy: false, cols: a.cells.map(c => level.color[c] || '#8890a0'),
+          kind: a.kind || null, lit: false, fuse: 0, boom: false };
       });
+      this.bombs = this.arrows.filter(a => a.kind === 'bomb');
+      this.autoQ = []; this.zapN = 0;
+      const sp = level.spec || {};
+      this.fuseP = { K: sp.fuseK || 5, SL: sp.fuseSlack || 1.6, EX: sp.fuseExtra == null ? 4 : sp.fuseExtra };
       for (const a of this.arrows) for (const c of a.cells) this.occ[c] = a.id;
       this.reveal = new Float32Array(W * H);
       this.target = new Float32Array(W * H);
@@ -95,6 +107,7 @@
       this.flash = new Map(); this.shake = 0;
       this.anims = []; this.mistakes = 0; this.time = 0;
       this.resize();
+      this._ignite(true);
     }
 
     resize() {
@@ -215,10 +228,69 @@
       if (!block) this._exit(a); else this._bump(a, block);
     }
 
-    _exit(a) {
+    /** كل الأسهم يلي لازم تطلع قبل هالسهم (يلي عطريقه، ويلي عطريقهم، وهكذا) */
+    _ancestors(a) {
+      const W = this.W, H = this.H, out = new Set(), st = [a];
+      while (st.length) {
+        const x = st.pop(), h = x.cells[x.cells.length - 1], [dx, dy] = DIRS[x.dir];
+        for (let cx = h % W + dx, cy = ((h / W) | 0) + dy; cx >= 0 && cy >= 0 && cx < W && cy < H; cx += dx, cy += dy) {
+          const o = this.occ[cy * W + cx];
+          if (o >= 0 && o !== x.id && o !== a.id && !out.has(o)) { out.add(o); st.push(this.arrows[o]); }
+        }
+      }
+      return out;
+    }
+
+    /** القنبلة النايمة بتشتعل لما يضل قدامها K أسهم أو أقل. العدّاد بيكفي دائماً للحل المثالي:
+     *  (كل يلي لازم يطلع قبلها وقبل القنابل المشتعلة + القنابل نفسها) × هامش + زيادة. */
+    _ignite(start) {
+      if (!this.bombs.length || this.over || this.won) return;
+      const P = this.fuseP;
+      for (const b of this.bombs) {
+        if (!b.alive || b.lit || b.boom) continue;
+        const A = this._ancestors(b);
+        if (A.size > P.K) continue;
+        const U = new Set(A); U.add(b.id);
+        for (const o of this.bombs) if (o !== b && o.alive && o.lit && o.fuse > 0) { this._ancestors(o).forEach(x => U.add(x)); U.add(o.id); }
+        b.lit = true; b.fuse = Math.ceil(U.size * P.SL) + P.EX;
+        if (!start) { const p = b.pts[(b.pts.length - 1) >> 1]; this._ring(p[0], p[1], 10, 80, 0.7, '#ff4d67', 4, 0.9); this._ring(p[0], p[1], 6, 46, 0.5, '#ffffff', 3, 0.7); }
+        if (this.h.onIgnite) this.h.onIgnite(b, !!start);
+      }
+    }
+
+    /** أسهم البرق يلي فضي طريقها بتنحط بالدور وبتنطلق لحالها ورا بعض */
+    _scanBolts() {
+      if (this.over || this.won) return;
+      for (const a of this.arrows) {
+        if (!a.alive || a.kind !== 'bolt' || a.busy || this.autoQ.some(q => q.id === a.id)) continue;
+        if (!this.blockOf(a)) this.autoQ.push({ id: a.id, t: 0.26 + this.autoQ.length * 0.1 });
+      }
+    }
+
+    _explode(b) {
+      b.fuse = 0; b.boom = true;       // انفجرت: بتضل سهم عادي "محروق" وبتطلع متل غيرها
+      if (!this.zen) this.hearts = Math.max(0, this.hearts - 1);
+      this.mistakes++;
+      this.flash.set(b.id, 0.9); this.shake = 0.42;
+      const p = b.pts[(b.pts.length - 1) >> 1], s = this.view.s;
+      const cols = ['#ff4d67', '#ff9f1c', '#ffd166', '#2b2d42', '#ffffff'];
+      for (let i = 0; i < 30; i++) {
+        const an = (i / 30) * Math.PI * 2 + Math.random() * 0.4, spd = (140 + Math.random() * 220) / s, life = 0.5 + Math.random() * 0.5;
+        this.particles.push({ kind: i % 4 ? 'spark' : 'star', x: p[0], y: p[1], vx: Math.cos(an) * spd, vy: Math.sin(an) * spd, drag: 3, g: 30 / s,
+          rot: Math.random() * 6, vr: (Math.random() - 0.5) * 10, s: (2.5 + Math.random() * 4) / s, life, life0: life, c: cols[i % cols.length] });
+      }
+      this._ring(p[0], p[1], 8, 120, 0.6, '#ff4d67', 6, 0.9);
+      this._ring(p[0], p[1], 4, 70, 0.45, '#ffd166', 4, 0.8);
+      if (this.hearts <= 0 && !this.zen) this.over = true;
+      if (this.h.onBomb) this.h.onBomb(this.hearts, b);
+    }
+
+    /** auto = سهم برق انطلق لحاله (ما بينحسب حركة على عدّاد القنابل) */
+    _exit(a, auto) {
       a.alive = false;
       for (const c of a.cells) this.occ[c] = -1;
       this.left--;
+      if (this.autoQ.length) this.autoQ = this.autoQ.filter(q => q.id !== a.id);
       const [dx, dy] = DIRS[a.dir];
       const hp = a.pts[a.pts.length - 1];
       // مسافة الخروج: حتى يغادر الذيل حدود الرقعة
@@ -230,10 +302,18 @@
       const dur = clamp(0.28 + dist * 0.016, 0.34, 0.85);
       const cols = a.cells.map(c => this.L.color[c]).filter(Boolean);
       this.lastExitPt = hp;
-      const an = { type: 'exit', a, E, n, dist, t: 0, dur, revealed: 0, edgeU: toEdge, cols, hot: 0 };
+      const an = { type: 'exit', a, E, n, dist, t: 0, dur, revealed: 0, edgeU: toEdge, cols, hot: 0, zap: !!auto };
       this.anims.push(an);
-      if (this.h.onExit) this.h.onExit(this.left, this.total);
+      if (auto) this._ring(hp[0], hp[1], 6, 44, 0.4, ZAP, 4, 0.9);
+      // القنابل: القنبلة يلي طلعت قبل الصفر تفكّكت، وكل حركة من اللاعب بتنقّص عدّاد الباقي
+      let defused = 0;
+      if (a.kind === 'bomb' && a.lit && a.fuse > 0) { defused = a.fuse; a.fuse = 0; }
+      if (!auto) for (const b of this.bombs) if (b.alive && b.lit && b.fuse > 0 && --b.fuse === 0) this._explode(b);
+      this.zapN = auto ? this.zapN + 1 : 0;
+      if (this.h.onExit) this.h.onExit(this.left, this.total, { auto: !!auto, chain: this.zapN, defused, bomb: a.kind === 'bomb' });
       an.hot = this.hot;   // التطبيق يحدّث مستوى السلسلة داخل onExit
+      this._ignite(false);
+      this._scanBolts();
       this.kick();
     }
 
@@ -251,11 +331,61 @@
       this.kick();
     }
 
-    addHearts(n) { this.hearts += n; this.over = false; this.loseT = -1; this.kick(); }
+    addHearts(n) { this.hearts += n; this.over = false; this.loseT = -1; this._ignite(false); this._scanBolts(); this.kick(); }
+
+    /** أقرب قنبلة مشتعلة للانفجار (أو null) */
+    urgentBomb() {
+      let best = null;
+      for (const b of this.bombs) if (b.alive && b.lit && b.fuse > 0 && (!best || b.fuse < best.fuse)) best = b;
+      return best;
+    }
+
+    /** الأسهم الحرة يلي بتقرّب القنبلة من الطلوع (أو القنبلة نفسها إذا صار طريقها فاضي) */
+    bombMoves(b) {
+      const A = this._ancestors(b);
+      return this.freeArrows().filter(a => !a.busy && (a === b || A.has(a.id)));
+    }
+
+    /** ينقل الكاميرا لسهم (زر القنبلة بالشريط العلوي) */
+    focusArrow(id) {
+      const a = this.arrows[id];
+      if (!a || !a.alive) return;
+      const p = a.pts[(a.pts.length - 1) >> 1];
+      const s = this.fitS >= 20 ? this.view.s : Math.max(this.view.s, 30);
+      if (s > this.fitS * 1.03) this._animView(this._clampView({ s, ox: this.cw / 2 - p[0] * s, oy: this.ch / 2 - p[1] * s }));
+      this._ring(p[0], p[1], 10, 70, 0.7, '#ff4d67', 4, 0.9);
+    }
+
+    // ——— حفظ المرحلة والرجوع لها ———
+    snapshot() {
+      const gone = [], fuse = {};
+      for (const a of this.arrows) if (!a.alive) gone.push(a.id);
+      for (const b of this.bombs) fuse[b.id] = [b.lit ? 1 : 0, b.fuse, b.boom ? 1 : 0];
+      return { gone, fuse, hearts: this.hearts, mistakes: this.mistakes };
+    }
+    restore(st) {
+      const W = this.W, H = this.H, gone = new Set(st.gone || []);
+      for (const a of this.arrows) {
+        if (!gone.has(a.id)) continue;
+        a.alive = false; this.left--;
+        for (const c of a.cells) { this.occ[c] = -1; this.target[c] = 1; }
+        for (const c of this.orphOf[a.id] || []) this.target[c] = 1;
+        const h = a.cells[a.cells.length - 1], [dx, dy] = DIRS[a.dir];
+        for (let x = h % W + dx, y = ((h / W) | 0) + dy; x >= 0 && y >= 0 && x < W && y < H; x += dx, y += dy) if (this.orphan[y * W + x]) this.target[y * W + x] = 1;
+      }
+      for (const b of this.bombs) { const f = st.fuse && st.fuse[b.id]; if (f) { b.lit = !!f[0]; b.fuse = f[1] | 0; b.boom = !!f[2]; } }
+      this.reveal.set(this.target);
+      this.hearts = st.hearts; this.mistakes = st.mistakes || 0;
+      if (this.hearts <= 0 && !this.zen) this.over = true;
+      this._ignite(true); this._scanBolts();
+      this.kick();
+    }
 
     useHint() {
-      const free = this.freeArrows().filter(a => !a.busy);
+      let free = this.freeArrows().filter(a => !a.busy);
       if (!free.length) return false;
+      const ub = this.urgentBomb();
+      if (ub) { const bm = this.bombMoves(ub); if (bm.length) free = bm; }
       // نفضّل السهم الذي يحرّر أكبر عدد من الأسهم الأخرى
       let best = free[0], bestScore = -1;
       for (const a of free) {
@@ -295,7 +425,7 @@
     _step(dt) {
       if (!this.L) return false;
       this.time += dt;
-      let busy = false;
+      let busy = false, rescan = false;
       const keep = [];
       for (const an of this.anims) {
         an.t += dt;
@@ -336,12 +466,25 @@
             this.shake = 0.3;
             if (this.h.onMistake) this.h.onMistake(this.hearts);
           }
-          if (p >= 1) an.a.busy = false;
+          if (p >= 1) { an.a.busy = false; rescan = true; }
         }
         if (p < 1) keep.push(an);
       }
       this.anims = keep;
+      if (rescan) this._scanBolts();
+      // أسهم البرق: كل واحد بدوره (بعد ما خلصت حلقة الحركات، لأن الخروج بيضيف حركة جديدة)
+      if (this.autoQ.length && !this.over) {
+        for (const q of this.autoQ) q.t -= dt;
+        const due = this.autoQ.filter(q => q.t <= 0);
+        if (due.length) {
+          this.autoQ = this.autoQ.filter(q => q.t > 0);
+          for (const q of due) { const a = this.arrows[q.id]; if (a.alive && !a.busy && !this.blockOf(a)) this._exit(a, true); }
+        }
+        busy = true;
+      }
       if (this.anims.length) busy = true;
+      // قنبلة عالآخر بتنبض ← رسم مستمر
+      if (!this.won && this.bombs.length && this.bombs.some(b => b.alive && b.lit && b.fuse > 0 && b.fuse <= 3)) busy = true;
 
       // كشف اللوحة تدريجياً
       for (let i = 0; i < this.reveal.length; i++) {
@@ -406,6 +549,7 @@
       if (!this.L) return;
       const v = this.view, W = this.W, H = this.H, L = this.L;
       const sh = this.shake > 0 ? Math.sin(this.time * 70) * 6 * (this.shake / 0.3) : 0;
+      this._sh = sh;
       ctx.translate(v.ox + sh, v.oy);
       ctx.scale(v.s, v.s);
       if (this.popFx) {
@@ -486,6 +630,7 @@
       else for (const a of this.arrows) {
         if (!a.alive || animIds.has(a.id)) continue;
         let col = th.ink, w = lw;
+        if (a.kind) { col = a.kind === 'bolt' ? BOLT_INK : this._kindCol(a).b; w = lw * 1.5; }
         if (this.flash.has(a.id)) col = th.danger;
         if (this.trace === a.id) { col = th.accent; w = lw * 1.6; }
         if (this.hint && this.hint.id === a.id) {
@@ -503,7 +648,7 @@
         const u = an.u || 0;
         let alpha = 1;
         if (an.type === 'exit') alpha = clamp(1.6 - (u / an.dist) * 1.6 + 0.6, 0, 1);
-        const hc = an.hot ? HOT[Math.min(HOT.length, an.hot) - 1] : null;
+        const hc = an.zap ? ZAP : an.hot ? HOT[Math.min(HOT.length, an.hot) - 1] : null;
         if (an.type === 'exit' && u > 0.05) {
           // ذيل حركة خلف السهم (أعرض وملوّن أثناء السلسلة)
           const L0 = hc ? 3.2 : 1.8, tw = hc ? lw * 2.2 : lw * 1.3;
@@ -529,12 +674,15 @@
         }
         const col = an.type === 'bump' && this.flash.has(an.a.id) ? th.danger : (hc || th.ink);
         const sub = subPath(an.E, u, u + an.n);
+        const kc = an.a.kind ? this._kindCol(an.a) : null;
         if (this.trail) {
-          const tc = col !== th.ink ? { b: col, e: edgeOf(col), h: lightOf(col) } : this._trailCol(an.a);
-          this._tube(sub, an.a.dir, tc, lw);
-        } else this._arrow(sub, an.a.dir, col, lw);
+          const tc = col !== th.ink ? { b: col, e: edgeOf(col), h: lightOf(col) } : (kc || this._trailCol(an.a));
+          this._tube(sub, an.a.dir, tc, kc ? lw * 1.12 : lw);
+        } else this._arrow(sub, an.a.dir, col === th.ink && kc ? (an.a.kind === 'bolt' ? BOLT_INK : kc.b) : col, kc ? lw * 1.5 : lw);
         ctx.globalAlpha = 1;
       }
+      // علامات العناصر الخاصة (برق / قنبلة) ومسار القنبلة المشتعلة
+      this._specials(lw, animIds);
       // العدسة
       if (this.lens) this._drawLens(lw);
       // لمعة الفوز تمر على اللوحة (باستخدام source-atop السريع بدون قص مسارات ثقيل)
@@ -678,6 +826,68 @@
       ctx.fill(); ctx.stroke();
     }
 
+    // ——— العناصر الخاصة: اللون والعلامات ———
+    _kindCol(a) {
+      if (a.kind === 'bolt') return BOLT_C;
+      if (a.boom) return BURNT_C;
+      if (!a.lit) return BOMB_C;
+      return a.fuse <= 3 && Math.sin(this.time * 9) > 0 ? BOMB_HOT : BOMB_LIT;
+    }
+    _specials(lw, animIds) {
+      const ctx = this.ctx, v = this.view;
+      let any = false;
+      for (const a of this.arrows) if (a.alive && a.kind && !a.boom) { any = true; break; }
+      if (!any) return;
+      // مسار القنبلة المشتعلة: خط أحمر منقّط لحد أول سهم سادد طريقها (اللاعب بيعرف من وين يبلّش)
+      for (const b of this.bombs) {
+        if (!b.alive || !b.lit || b.fuse <= 0 || animIds.has(b.id)) continue;
+        const [dx, dy] = DIRS[b.dir], p = b.pts[b.pts.length - 1], bl = this.blockOf(b);
+        const len = bl ? bl.dist - 0.5 : (b.dir === 0 ? this.W - p[0] : b.dir === 2 ? p[0] : b.dir === 1 ? this.H - p[1] : p[1]) + 0.5;
+        ctx.globalAlpha = 0.65; ctx.strokeStyle = bl ? '#e11d48' : '#10b981'; ctx.lineWidth = Math.max(lw * 0.8, 1.6 / v.s);
+        ctx.setLineDash([0.2, 0.2]);
+        ctx.beginPath(); ctx.moveTo(p[0] + dx * 0.45, p[1] + dy * 0.45); ctx.lineTo(p[0] + dx * len, p[1] + dy * len); ctx.stroke();
+        ctx.setLineDash([]);
+        if (bl) { ctx.beginPath(); ctx.arc(p[0] + dx * (len + 0.5), p[1] + dy * (len + 0.5), 0.42, 0, 7); ctx.stroke(); }
+        ctx.globalAlpha = 1;
+      }
+      // العلامات بإحداثيات الشاشة: بتضل مقروءة حتى لو الخانة صغيرة كتير
+      ctx.save();
+      ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      for (const a of this.arrows) {
+        if (!a.alive || !a.kind || a.boom || animIds.has(a.id)) continue;
+        const bomb = a.kind === 'bomb';
+        const q = bomb ? a.pts[(a.pts.length - 1) >> 1] : a.pts[0];
+        const x = v.ox + (this._sh || 0) + q[0] * v.s, y = v.oy + q[1] * v.s;
+        if (x < -30 || y < -30 || x > this.cw + 30 || y > this.ch + 30) continue;
+        if (!bomb) {
+          const r = clamp(v.s * 0.36, 6, 11), k = (r * 1.5) / 24;
+          ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = '#fff6c2'; ctx.fill();
+          ctx.lineWidth = 1.3; ctx.strokeStyle = '#a86a00'; ctx.stroke();
+          ctx.beginPath();
+          BOLT_GLYPH.forEach((g, i) => { const gx = x + (g[0] - 12) * k, gy = y + (g[1] - 12) * k; if (i) ctx.lineTo(gx, gy); else ctx.moveTo(gx, gy); });
+          ctx.closePath(); ctx.fillStyle = '#e08a00'; ctx.fill();
+          continue;
+        }
+        const lit = a.lit && a.fuse > 0, hot = lit && a.fuse <= 3;
+        const r = (lit ? clamp(v.s * 0.46, 9, 15) : clamp(v.s * 0.36, 6.5, 11)) * (hot ? 1 + 0.12 * Math.sin(this.time * 9) : 1);
+        // فتيل القنبلة
+        ctx.strokeStyle = lit ? '#7a4a12' : '#6b6f86'; ctx.lineWidth = Math.max(1.4, r * 0.18);
+        ctx.beginPath(); ctx.moveTo(x + r * 0.5, y - r * 0.72); ctx.quadraticCurveTo(x + r * 0.95, y - r * 1.25, x + r * 1.15, y - r * 0.95); ctx.stroke();
+        if (lit) { ctx.beginPath(); ctx.arc(x + r * 1.15, y - r * 0.95, r * (0.2 + 0.07 * Math.sin(this.time * 14)), 0, 7); ctx.fillStyle = '#ffb703'; ctx.fill(); }
+        ctx.beginPath(); ctx.arc(x, y, r, 0, 7);
+        ctx.fillStyle = hot ? '#e11d48' : lit ? '#1c1b2e' : '#3b3f58'; ctx.fill();
+        ctx.lineWidth = lit ? 2 : 1.4; ctx.strokeStyle = hot ? '#ffffff' : lit ? '#ff4d67' : 'rgba(255,255,255,.8)'; ctx.stroke();
+        ctx.beginPath(); ctx.arc(x - r * 0.34, y - r * 0.36, r * 0.2, 0, 7); ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fill();
+        if (lit) {
+          ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.font = '800 ' + (r * (a.fuse > 9 ? 1.05 : 1.3)).toFixed(1) + 'px Baloo, system-ui, sans-serif';
+          ctx.fillText(String(a.fuse), x, y + r * 0.08);
+        }
+      }
+      ctx.restore();
+    }
+
     // ——— ستايلات أسهم المراحل (أنابيب ملوّنة لامعة بدل الخط الأسود) ———
     _trailCol(a) {
       const T = TRAILS[this.trail % TRAILS.length];
@@ -698,7 +908,7 @@
     _trailArrows(lw, animIds, pulse) {
       const ctx = this.ctx, th = this.theme, ln = this.lens, T = TRAILS[this.trail % TRAILS.length];
       const bw = lw * 1.5, ew = lw * 2.25;
-      const groups = new Map(), heads = [], special = [];
+      const groups = new Map(), heads = [], special = [], kinds = [];
       for (const a of this.arrows) {
         if (!a.alive || animIds.has(a.id)) continue;
         let col = null;
@@ -707,6 +917,7 @@
         if (ln && ln.block && ln.block.id === a.id) col = th.danger;
         if (ln && ln.id === a.id) col = ln.block ? th.danger : th.ok;
         if (col) { special.push([a, col]); continue; }
+        if (a.kind) { kinds.push(a); continue; }
         const c = this._trailCol(a), k = c.b + c.e + c.h;
         let g = groups.get(k);
         if (!g) { g = { c, p: new Path2D() }; groups.set(k, g); }
@@ -724,6 +935,11 @@
       ctx.globalAlpha = ga * 0.8; ctx.lineWidth = lw * 0.48; for (const g of groups.values()) { ctx.strokeStyle = g.c.h; ctx.stroke(g.p); }
       ctx.globalAlpha = ga;
       for (const [a, c] of heads) this._artHead(a.pts[a.pts.length - 1], a.dir, bw * 1.18, (ew - bw) / 2, c.b, c.e);
+      for (const a of kinds) {
+        const c = this._kindCol(a);
+        if (a.kind === 'bolt' || (a.lit && !a.boom)) { ctx.strokeStyle = a.kind === 'bolt' ? BOLT_GLOW : c.b; ctx.globalAlpha = ga * 0.34; ctx.lineWidth = ew * 2.2; strokePoly(ctx, a.pts.length > 1 ? a.pts : [a.pts[0], a.pts[0]]); ctx.globalAlpha = ga; }
+        this._tube(a.pts, a.dir, c, lw * 1.12);
+      }
       for (const [a, col] of special) {
         if (this.hint && this.hint.id === a.id) {
           ctx.strokeStyle = th.accent; ctx.globalAlpha = 0.25 + 0.3 * pulse; ctx.lineWidth = lw * 4;

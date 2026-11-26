@@ -19,6 +19,8 @@
     prof: { n: '', a: -1, t: 0 }, wk: { id: '', s: 0 },
     // الميداليات: الدرجة المحققة لكل ميدالية + عدّادات التقدم
     med: {}, mp: {},
+    // خرائط الترند: {رقم المرحلة: معرّف اللوحة} (0 = لوحة عادية — المرحلة بلّشت قبل ما توصل خريطة جديدة)
+    lvPic: {},
   };
   const fresh = () => JSON.parse(JSON.stringify(DEFAULT));
   let S;
@@ -31,6 +33,7 @@
   S.own = Object.assign(fresh().own, S.own); S.eq = Object.assign(fresh().eq, S.eq); S.login = Object.assign(fresh().login, S.login);
   S.prof = Object.assign(fresh().prof, S.prof);
   if (S.prof.a < 0) S.prof.a = Math.floor(Math.random() * 24);
+  Gen.setLevelPics(() => S.lvPic);
   let cloudOn = false, cloudT = 0;
   const save = () => {
     try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignore */ }
@@ -51,7 +54,7 @@
     banner(on) { if (ADS) try { NATIVE.setBanner(!!on); } catch (e) { /* ignore */ } },
     ready() { if (!ADS) return false; try { return !!NATIVE.rewardedReady(); } catch (e) { return false; } },
     reward(tag, cb) { if (!ADS) return; Ads.cbs[tag] = cb; try { NATIVE.showRewarded(tag); } catch (e) { delete Ads.cbs[tag]; } },
-    /** يُستدعى عند مغادرة شاشة الفوز */
+    /** يُستدعى عند مغادرة شاشة الفوز أو الخسارة (كل جولة تُحسب) */
     afterWin() {
       if (!ADS || G.mode === 'gift') return;
       S.ad.wins = (S.ad.wins || 0) + 1; save();
@@ -126,7 +129,35 @@
     ctx.drawImage(hd, (sz - w) / 2, (sz - h) / 2, w, h);
     if (mode === 'silhouette') { ctx.globalCompositeOperation = 'source-in'; ctx.fillStyle = cssVar('--cell'); ctx.fillRect(0, 0, sz, sz); ctx.globalCompositeOperation = 'source-over'; }
   }
-  const picCount = () => Gen.mainPics().filter(p => S.pics[p.id]).length;
+  const picCount = () => Gen.journeyPics().filter(p => S.pics[p.id]).length;
+
+  // ——— خرائط الترند (من الإنترنت) ———
+  const trendPics = () => (window.Trend ? Trend.list() : []);
+  /** أحدث خريطة ترند ما شافها اللاعب بتنحط بمرحلته الحالية (مرة وحدة؛ المراحل اللي خلّصها ما بتتغير) */
+  function assignTrend() {
+    const n = S.level;
+    if (!S.lvPic || typeof S.lvPic !== 'object') S.lvPic = {};
+    if (n < 4 || n in S.lvPic) return false;
+    const used = new Set(Object.values(S.lvPic));
+    const p = trendPics().find(x => !used.has(x.id) && !S.pics[x.id] && !S.pack[x.id]);
+    if (!p) return false;
+    S.lvPic[n] = p.id; save();
+    return true;
+  }
+  let trendAt = 0;
+  function trendRefresh() {
+    if (!window.Trend) return;
+    trendAt = Date.now();
+    Trend.refresh(() => Object.values(S.lvPic || {}).filter(Boolean)).then(fresh => {
+      if (!fresh.length) return;
+      assignTrend();
+      if (current === 'home') renderHome();
+      else if (current === 'pack') renderPack();
+      else if (current === 'gallery') renderGallery();
+      if (current !== 'game') toast(t('trendNew'), 2600);
+    });
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - trendAt > 3 * 3600e3) trendRefresh(); });
 
   // ——— الشاشات ———
   let current = 'home', prevScreen = 'home';
@@ -170,13 +201,17 @@
   function totalStars() { return Object.values(S.stars).reduce((a, b) => a + b, 0); }
   function renderHome() {
     $('h-stars').textContent = totalStars();
-    $('h-pics').textContent = picCount() + '/' + Gen.mainPics().length;
+    $('h-pics').textContent = picCount() + '/' + Gen.journeyPics().length;
     $('h-level').textContent = t('level') + ' ' + S.level;
+    assignTrend();
     const spec = Gen.levelSpec(S.level);
     const cv = $('h-mystery');
     drawArt(cv, spec.pic, spec.w || spec.f, spec.mirror, 'silhouette', Gen.buildBoard(PICTURES.find(p => p.id === spec.pic), spec.w || spec.f, spec.mirror));
     $('h-pack').textContent = Gen.packPics().filter(p => S.pack[p.id]).length + '/' + Gen.packPics().length;
     renderRank(); renderChestBar();
+    const run = runLoad();
+    $('h-resume').classList.toggle('hidden', !run);
+    if (run) { $('h-resume-t').textContent = t('resume') + ' · ' + (run.title || ''); $('h-resume-p').textContent = run.pct + '%'; }
     $('h-daily').innerHTML = S.daily.last === today() ? t('dailyDone') : (S.daily.streak > 0 && S.daily.last === yesterday() ? icon('i-fire') + ' ' + t('streak') + ' ' + S.daily.streak : t('dailyHard').replace('{n}', Gen.dailyIndex(today()) + 1));
   }
 
@@ -198,8 +233,9 @@
   // ——— المعرض ———
   function renderGallery() {
     const g = $('gal-grid');
-    const pics = Gen.mainPics();
-    $('gal-count').textContent = picCount() + '/' + pics.length;
+    // الكلاسيكية + خرائط الترند اللي كشفها اللاعب بالمراحل
+    const pics = Gen.journeyPics().concat(trendPics().filter(p => S.pics[p.id]).reverse());
+    $('gal-count').textContent = pics.filter(p => S.pics[p.id]).length + '/' + pics.length;
     g.innerHTML = pics.map(p => `<div class="gal ${S.pics[p.id] ? '' : 'locked'}"><canvas data-p="${p.id}"></canvas><span>${S.pics[p.id] ? p.name[S.set.lang] : '؟'}</span></div>`).join('');
     requestAnimationFrame(() => g.querySelectorAll('canvas').forEach(c => drawArt(c, c.dataset.p, 24, false, S.pics[c.dataset.p] ? 'full' : 'silhouette', picBoard(c.dataset.p))));
   }
@@ -228,13 +264,18 @@
     const g = $('pack-grid'), pics = Gen.packPics(), gl = gifts();
     $('pack-count').textContent = pics.filter(p => S.pack[p.id]).length + '/' + pics.length;
     const stars = st => `<span class="st">${[1, 2, 3].map(i => icon('i-star', i <= st ? 'on' : '')).join('')}</span>`;
-    const GN = { animals: 'packAnimals', sea: 'packSea', sweets: 'packSweets', classic: 'packClassic' };
+    const GN = { animals: 'packAnimals', sea: 'packSea', sweets: 'packSweets', classic: 'packClassic', trend: 'packTrend' };
+    // الترند أول شي بالشاشة والأحدث فوق (أرقامه بآخر القائمة فما بتتغير أرقام اللوحات القديمة)
+    const groups = Gen.packGroups().filter(gr => gr.count), recent = Date.now() - 2 * 864e5;
+    groups.sort((a, b) => (b.key === 'trend') - (a.key === 'trend'));
     g.innerHTML = gl.map(x => `<button class="pk love" data-k="g:${x.id}"><canvas></canvas><span>${esc(x.name)}</span>${stars(S.pack[x.id] || 0)}</button>`).join('')
-      + Gen.packGroups().map(gr => {
-        const done = pics.slice(gr.start, gr.start + gr.count).filter(p => S.pack[p.id]).length;
-        const isNew = gr.key === 'sea' || gr.key === 'sweets';
+      + groups.map(gr => {
+        const items = pics.slice(gr.start, gr.start + gr.count).map((p, j) => [p, gr.start + j]);
+        if (gr.key === 'trend') items.reverse();
+        const done = items.filter(([p]) => S.pack[p.id]).length;
+        const isNew = gr.key === 'trend' ? items.some(([p]) => p.d && Date.parse(p.d) >= recent) : gr.key === 'sea' || gr.key === 'sweets';
         return `<h4 class="pk-head">${t(GN[gr.key])}${isNew ? `<i class="new">${t('newBadge')}</i>` : ''}<small>${done}/${gr.count}</small></h4>`
-          + pics.slice(gr.start, gr.start + gr.count).map((p, j) => `<button class="pk" data-k="p:${gr.start + j}"><canvas></canvas><span>${esc(p.name[S.set.lang])}</span>${stars(S.pack[p.id] || 0)}</button>`).join('');
+          + items.map(([p, i]) => `<button class="pk" data-k="p:${i}"><canvas></canvas><span>${esc(p.name[S.set.lang])}</span>${stars(S.pack[p.id] || 0)}</button>`).join('');
       }).join('');
     g.querySelectorAll('.pk').forEach(b => b.addEventListener('click', () => {
       Sound.unlock(); Sound.click();
@@ -287,7 +328,7 @@
   $('set-safe').addEventListener('change', e => { S.set.safe = e.target.checked; save(); engine.safeTap = S.set.safe; });
   $('set-reset').addEventListener('click', () => {
     modal(`<h3>⚠️</h3><p>${t('resetConfirm')}</p><div class="m-actions"><button class="btn" data-a="yes" style="color:var(--danger)">${t('yes')}</button><button class="btn primary" data-a="no">${t('no')}</button></div>`, {
-      yes: () => { const set = S.set, gf = S.gifts, pf = S.prof; S = fresh(); S.set = set; S.gifts = gf; S.prof = pf; save(); applyStyle(); closeModal(); show('home'); },
+      yes: () => { const set = S.set, gf = S.gifts, pf = S.prof; S = fresh(); S.set = set; S.gifts = gf; S.prof = pf; runClear(); save(); applyStyle(); closeModal(); show('home'); },
       no: closeModal,
     });
   });
@@ -306,21 +347,103 @@
 
   // ——— اللعب ———
   const G = { mode: 'journey', n: 1, level: null, usedChance: false, combo: 0, lastExit: 0, coachStep: 0, streak: 0, best: 0, miss: 0, nudge: 0 };
+  // القلوب والنجوم حسب حجم المرحلة: مرحلة 250 سهم مو متل مرحلة 30
+  const heartsFor = total => 3 + (total >= 100 ? 1 : 0) + (total >= 200 ? 1 : 0);
+  const starsFor = (total, mistakes) => { const a = Math.floor(total / 80); return mistakes <= a ? 3 : mistakes <= 2 * a + 1 ? 2 : 1; };
+  const hotOf = n => (n >= 12 ? 3 : n >= 8 ? 2 : n >= 5 ? 1 : 0);
+
+  // ——— حفظ المرحلة الجارية: اللاعب بيطلع (أو النظام بيسكّر التطبيق) وبيرجع بيكمّل من نفس المكان ———
+  const RUN_KEY = 'siham.run';
+  const runSig = lv => { let h = (lv.W * 131 + lv.H) | 0; for (const a of lv.arrows) h = (Math.imul(h, 31) + a.cells[0] * 7 + a.cells.length * 3 + a.dir + (a.kind ? 11 : 0)) | 0; return lv.arrows.length + ':' + (h >>> 0).toString(36); };
+  function runClear() { try { localStorage.removeItem(RUN_KEY); } catch (e) { /* ignore */ } }
+  function runLoad() {
+    try {
+      const r = JSON.parse(localStorage.getItem(RUN_KEY) || 'null');
+      if (!r || r.v !== 1 || !r.st) return null;
+      if (r.mode === 'daily' && r.day !== today()) { runClear(); return null; }
+      return r;
+    } catch (e) { return null; }
+  }
+  function runSave() {
+    if (!engine.L || engine.L !== G.level || engine.won || engine.left === engine.total || engine.left === 0) return;
+    const r = {
+      v: 1, mode: G.mode, n: G.n, pk: G.mode === 'pack' ? Gen.packPics()[G.pk].id : null, gift: G.mode === 'gift' ? G.gift.id : null,
+      day: G.mode === 'daily' ? today() : null, seed: G.level.spec.seed, sig: runSig(G.level), st: engine.snapshot(),
+      ms: Math.max(0, (G.hidAt || Date.now()) - G.t0), used: G.usedChance ? 1 : 0, adH: G.adHearts || 0, coinH: G.coinHearts || 0,
+      best: G.best, streak: G.streak, hints: G.hintsUsed, lens: G.lensUsed, misses: G.misses, bombs: G.bombsOut, zap: G.zapBest,
+      title: $('g-title').textContent, pct: Math.round(100 * (1 - engine.left / engine.total)),
+    };
+    try { localStorage.setItem(RUN_KEY, JSON.stringify(r)); } catch (e) { /* ignore */ }
+  }
+  const runFor = (mode, key) => { const r = runLoad(); return r && r.mode === mode && (mode === 'journey' ? r.n === key : mode === 'pack' ? r.pk === key : mode === 'gift' ? r.gift === key : true) ? r : null; };
+  function resumeRun() {
+    const r = runLoad();
+    if (!r) { renderHome(); return; }
+    if (r.mode === 'journey') startLevel(r.n);
+    else if (r.mode === 'pack') startPack(Gen.packPics().findIndex(p => p.id === r.pk));
+    else if (r.mode === 'gift') startGift(r.gift);
+    else if (r.mode === 'daily') startDaily();
+    else startZen(r);
+  }
+
+  /** عدّاد القنبلة مكان شارة الصعوبة: أقرب قنبلة للانفجار، والكبسة عليه بتنقل الكاميرا لعندها */
+  function updateBombChip() {
+    const el = $('g-diff'), ub = engine.L ? engine.urgentBomb() : null;
+    if (ub && !engine.won) {
+      el.innerHTML = `💣 <b dir="ltr">${ub.fuse}</b>`;
+      el.classList.add('bomb'); el.classList.toggle('hot', ub.fuse <= 3); el.dataset.bomb = ub.id;
+    } else if (el.classList.contains('bomb')) {
+      el.classList.remove('bomb', 'hot'); delete el.dataset.bomb; el.textContent = G.diffLabel || '';
+    }
+  }
+  /** مرحلة تعريف القنبلة: السهم يلي لازم يطلع هلق بيضوي (تلميح مجاني) */
+  function guideBomb() {
+    if (!G.level || G.level.spec.intro !== 'bomb' || engine.over || engine.won) return;
+    const ub = engine.urgentBomb(); if (!ub) return;
+    const mv = engine.bombMoves(ub); if (!mv.length) return;
+    engine.hint = { id: (mv.find(a => a === ub) || mv[0]).id, t: 40 }; engine.kick();
+  }
+
   const engine = new Engine($('board'), {
-    onExit(left, total) {
+    onExit(left, total, info) {
+      info = info || {};
       const now = performance.now();
       G.combo = now - G.lastExit < 1400 ? G.combo + 1 : 0;
       G.lastExit = now;
       G.streak++; G.best = Math.max(G.best, G.streak); G.miss = 0; G.nudge = 0;
-      engine.setHot(G.streak >= 12 ? 3 : G.streak >= 8 ? 2 : G.streak >= 5 ? 1 : 0);
+      engine.setHot(hotOf(G.streak));
       Sound.pop(total - left - 1, total, G.combo);
+      if (info.auto) { Sound.zap(info.chain); G.zapBest = Math.max(G.zapBest || 0, info.chain); }
       Music.setProgress(1 - left / total);
-      vibrate(10);
+      vibrate(info.auto ? 16 : 10);
       updateHud();
       hideCoach(); hideNudge();
       idleArm();
       streakFx(left, total);
+      // تفاعل متسلسل: سهمين برق أو أكتر ورا بعض
+      if (info.auto && info.chain >= 2 && left > 0) { floater(`<b dir="ltr">⚡ ×${info.chain}</b><small>${t('zapChain')}</small>`, 't4'); glow('#ffc400'); }
+      if (info.defused) { G.bombsOut = (G.bombsOut || 0) + 1; if (left > 0) floater(`<b>${t('bombSafe')}</b>`, 'info'); Sound.defuse(); }
+      else if (!info.auto) { const ub = engine.urgentBomb(); if (ub && ub.fuse <= 3) Sound.tick(ub.fuse); }
+      updateBombChip(); guideBomb();
+      runSave();
       if (left === 0) engine.fit(true);   // آخر سهم: رجّع الزوم لوضعه الطبيعي
+    },
+    onIgnite(b, start) {
+      if (start) return;                 // بداية المرحلة أو الرجوع لها: launch بيحدّث العدّاد
+      updateBombChip(); guideBomb();
+      Sound.ignite(); vibrate([20, 30, 20]);
+      floater(`<b>${t('bombLit').replace('{n}', b.fuse)}</b>`, 'info');
+      if (!S.seen.bombLit) { S.seen.bombLit = 1; save(); setTimeout(() => { if (current === 'game' && engine.urgentBomb()) nudgeShow(t('nudgeBomb'), '💣', true); }, 1100); }
+    },
+    onBomb(hearts) {
+      Sound.boom(); vibrate([60, 40, 110]);
+      G.combo = 0;
+      if (G.streak >= 3) { const sb = $('g-streak'); sb.classList.remove('bump'); sb.classList.add('broke'); }
+      G.streak = 0; engine.setHot(0);
+      updateHud(true); updateBombChip();
+      floater(`<b>${t('bombBoom')}</b>`, 'info');
+      glow('#ff4d67');
+      runSave();
     },
     onMistake(hearts) {
       Sound.bump(); vibrate([40, 30, 60]);
@@ -334,9 +457,10 @@
         G.calmShown = true;
         nudgeShow(G.mode === 'zen' || S.lenses > 0 ? t('calmLens') : t('calm'), '😌', true);
       }
+      runSave();
     },
     onWin, onLose,
-    onLens(ok) { G.lensUsed = (G.lensUsed || 0) + 1; Sound.lens(ok); toast(ok ? t('lensClear') : t('lensBlocked')); if (G.mode !== 'zen') { S.lenses--; save(); } setLensUI(false); updateTools(); },
+    onLens(ok) { setTimeout(runSave, 0); G.lensUsed = (G.lensUsed || 0) + 1; Sound.lens(ok); toast(ok ? t('lensClear') : t('lensBlocked')); if (G.mode !== 'zen') { S.lenses--; save(); } setLensUI(false); updateTools(); },
     onAutoZoom() { toast(t('autoZoom')); vibrate(15); },
     onTrace() { vibrate(15); hideCoach(); },
   });
@@ -345,15 +469,18 @@
   // الوقت لا يُحسب والتطبيق في الخلفية
   document.addEventListener('visibilitychange', () => {
     if (!G.t0) return;
-    if (document.hidden) G.hidAt = Date.now();
+    if (document.hidden) { G.hidAt = Date.now(); if (current === 'game') runSave(); }
     else if (G.hidAt) { G.t0 += Date.now() - G.hidAt; G.hidAt = 0; }
   });
 
   function startLevel(n) {
+    // المرحلة الحالية: إذا ما إلها خريطة ترند بنثبّت إنها عادية، كي ما تتغير رسمتها لو وصلت خريطة وهو عم يلعب
+    if (n === S.level && n >= 4) { assignTrend(); if (!(n in S.lvPic)) { S.lvPic[n] = 0; save(); } }
     G.mode = 'journey'; G.n = n;
-    launch(Gen.makeLevel(Gen.levelSpec(n)), 3);
     $('g-title').textContent = t('level') + ' ' + n;
+    launch(Gen.makeLevel(Gen.levelSpec(n)), 3, false, runFor('journey', n));
     const tips = { 1: 'coach1', 3: 'coach3', 4: 'coach4', 5: 'coach5' };
+    if (modalOpen) return;               // بطاقة «عنصر جديد» مفتوحة
     if (tips[n] && !S.seen[tips[n]]) { S.seen[tips[n]] = 1; save(); setTimeout(() => coach(t(tips[n])), 350); }
     else if (G.level.spec.boss) setTimeout(() => { if (current === 'game' && G.mode === 'journey' && G.n === n) nudgeShow(t('bossLv'), '🔥', true); }, 400);
   }
@@ -362,35 +489,52 @@
     if (!pic) { show('pack'); return; }
     G.mode = 'pack'; G.n = 0; G.pk = i;
     const lv = Gen.makeLevel(Gen.packSpec(i));
-    launch(lv, 3);
     $('g-title').textContent = pic.name[S.set.lang];
+    launch(lv, 3, false, runFor('pack', pic.id));
   }
   function startGift(id) {
     const g = gifts().find(x => x.id === id);
     if (!g) { show('pack'); return; }
     G.mode = 'gift'; G.n = 0; G.gift = g;
-    launch(Gen.makeLevel(Gen.customSpec(g)), 3);
     $('g-title').textContent = g.name;
+    launch(Gen.makeLevel(Gen.customSpec(g)), 3, false, runFor('gift', g.id));
   }
   function startDaily() {
     G.mode = 'daily'; G.n = 0;
-    launch(Gen.makeLevel(Gen.dailySpec(today())), 3);
     $('g-title').textContent = t('dailyDay').replace('{n}', Gen.dailyIndex(today()) + 1);
-    $('g-diff').textContent = t('insane');
+    launch(Gen.makeLevel(Gen.dailySpec(today())), 3, false, runFor('daily'));
+    $('g-diff').textContent = G.diffLabel = t('insane');
   }
-  function startZen() {
+  /** run: جولة استرخاء محفوظة نكمّلها (وإلا لوحة عشوائية جديدة) */
+  function startZen(run) {
     G.mode = 'zen'; G.n = 0;
-    launch(Gen.makeLevel(Gen.zenSpec((Math.random() * 1e9) >>> 0)), 0, true);
     $('g-title').textContent = t('zen');
+    const r = run && run.mode === 'zen' ? run : null;
+    launch(Gen.makeLevel(Gen.zenSpec(r ? r.seed : (Math.random() * 1e9) >>> 0)), 0, true, r);
   }
-  function launch(level, hearts, zen) {
+  /** run: جولة محفوظة لنفس المرحلة (نتأكد إن الرقعة نفسها قبل ما نكمّلها) */
+  function launch(level, hearts, zen, run) {
+    if (run && run.sig !== runSig(level)) { run = null; runClear(); }
     G.level = level; G.usedChance = false; G.combo = 0;
     G.streak = 0; G.best = 0; G.miss = 0; G.nudge = 0; G.calmShown = false; G.adHearts = 0; G.coinHearts = 0; G.bonus = 0;
     G.t0 = Date.now(); G.hidAt = 0; G.hintsUsed = 0; G.lensUsed = 0; G.misses = 0;
+    G.bombsOut = 0; G.zapBest = 0; G.resumedDead = false;
+    hearts = zen ? 0 : heartsFor(level.arrows.length);
+    G.maxHearts = hearts;
     applyStyle();
     hideCoach(); hideNudge(true); closeModal(); setLensUI(false); clearFx();
     show('game');
     engine.load(level, { hearts, zen });
+    if (run) {
+      engine.restore(run.st);
+      G.usedChance = !!run.used; G.adHearts = run.adH || 0; G.coinHearts = run.coinH || 0;
+      G.best = run.best || 0; G.streak = run.streak || 0; G.hintsUsed = run.hints || 0; G.lensUsed = run.lens || 0; G.misses = run.misses || 0;
+      G.bombsOut = run.bombs || 0; G.zapBest = run.zap || 0;
+      G.t0 = Date.now() - (run.ms || 0);
+      G.resumedDead = engine.over;
+      engine.setHot(hotOf(G.streak));
+      if (!engine.over) toast(t('resumed'));
+    }
     // نجهّز النسخة الناعمة من اللوحة (تظهر مكان البكسلات لحظة الفوز)
     const sp = level.spec || {};
     if (sp.pic && G.mode !== 'gift') setTimeout(() => {
@@ -407,7 +551,8 @@
     idleArm();
     const cells = level.mask.reduce((a, b) => a + b, 0);
     const diff = (level.spec && level.spec.diff) || Gen.difficultyOf(level.art ? level.arrows.length * 3.5 : cells);
-    $('g-diff').textContent = zen ? '🍃' : t(diff);
+    $('g-diff').classList.remove('bomb', 'hot'); delete $('g-diff').dataset.bomb;
+    $('g-diff').textContent = G.diffLabel = zen ? '🍃' : t(diff);
     G.diff = zen ? null : diff;
     // موسيقى هادئة أو حماسية حسب المرحلة
     G.style = zen || G.mode === 'pack' || G.mode === 'gift' ? 'calm'
@@ -415,9 +560,34 @@
       : (diff === 'hard' || diff === 'expert' || diff === 'insane' || (G.n > 3 && G.n % 5 === 0)) ? 'hype' : 'calm';
     G.seed = level.spec.seed;
     Music.start(G.style, G.seed);
-    updateHud(); updateTools();
+    if (run) Music.setProgress(1 - engine.left / engine.total);
+    updateHud(); updateTools(); updateBombChip();
+    newElements(level);
+  }
+  /** أول مرة بيشوف اللاعب سهم برق أو قنبلة: بطاقة تعريف قبل ما يبلّش (الوقت ما بينحسب وهي مفتوحة) */
+  function newElements(level) {
+    const kinds = ['bolt', 'bomb'].filter(k => !S.seen[k] && level.arrows.some(a => a.kind === k));
+    const next = () => {
+      const k = kinds.shift();
+      if (!k) {
+        if (engine.left === engine.total) G.t0 = Date.now();
+        if (level.spec.intro === 'bolt') setTimeout(() => { if (engine.L === level) coach(t('coachBolt')); }, 300);
+        if (level.spec.intro === 'bomb') setTimeout(() => { if (engine.L === level) { coach(t('coachBomb')); guideBomb(); } }, 300);
+        return;
+      }
+      const ic = k === 'bolt'
+        ? '<div class="ne-ic bolt"><svg viewBox="0 0 24 24"><path d="M13.5 1.5L4 13.5h6.5L9.5 22.5 20 9.5h-6.8z" fill="#fff" stroke="#b97500" stroke-width="1.2" stroke-linejoin="round"/></svg></div>'
+        : '<div class="ne-ic bomb"><span dir="ltr">9</span></div>';
+      modal(`<span class="ne-tag">${t('newEl')}</span>${ic}<h3>${t(k + 'Name')}</h3><p>${t(k + 'Desc')}</p>
+        <div class="m-actions"><button class="btn primary" data-a="ok">${t('letsGo')}</button></div>`,
+      { ok: () => { S.seen[k] = 1; save(); closeModal(); next(); } }, { locked: true, cls: ' newel' });
+      Sound.reward();
+    };
+    if (kinds.length) next();
+    else if (level.spec.intro === 'bomb') guideBomb();
   }
   function restart() {
+    runClear();
     if (G.mode === 'journey') startLevel(G.n);
     else if (G.mode === 'daily') startDaily();
     else if (G.mode === 'pack') startPack(G.pk);
@@ -430,7 +600,7 @@
     const hb = $('g-hearts');
     if (engine.zen) hb.innerHTML = '<span class="inf">∞</span>';
     else {
-      const max = Math.max(3, engine.hearts);
+      const max = Math.max(G.maxHearts || 3, engine.hearts);
       let h = '';
       for (let i = 0; i < max; i++) h += icon('i-heart', i < engine.hearts ? (gained && i === engine.hearts - 1 ? 'gain' : '') : 'lost' + (lost && i === engine.hearts ? ' breaking' : ''));
       hb.innerHTML = h;
@@ -506,7 +676,7 @@
       if (n === 5 && !S.seen.streak && !engine.zen) { S.seen.streak = 1; save(); setTimeout(() => nudgeShow(t('coachStreak'), '🔥', true), 900); }
     }
     // كل 10 على التوالي ترجع قلباً ضائعاً
-    if (!engine.zen && n % 10 === 0 && engine.hearts < 3) {
+    if (!engine.zen && n % 10 === 0 && engine.hearts < (G.maxHearts || 3)) {
       engine.addHearts(1); updateHud(false, true);
       floater(`<b>${t('heartGift')}</b>`, 'info');
       setTimeout(() => Sound.heart(), fired ? 720 : 0);
@@ -542,6 +712,8 @@
     idleArm();
   }
   function nudgeTarget(free) {
+    const ub = engine.urgentBomb();
+    if (ub) { const bm = engine.bombMoves(ub); if (bm.length) free = bm; }
     const keep = free.find(a => a.id === G.nudgeId);
     if (keep) return keep;
     let best = free[0], bs = -1;
@@ -557,6 +729,7 @@
     const free = engine.freeArrows().filter(a => !a.busy);
     if (!free.length) return null;
     const st = G.nudge;
+    if (st === 0 && engine.urgentBomb()) return { txt: t('nudgeBomb'), ic: '💣' };
     if (st === 0) {
       if (free.length === 1) return { txt: t('nudgeOne'), ic: '🔎' };
       if (free.length === 2) return { txt: t('nudgeTwo'), ic: '👀' };
@@ -633,18 +806,21 @@
   $('btn-pack').addEventListener('click', () => { Sound.unlock(); Sound.click(); show('pack'); });
 
   const exitTo = () => G.mode === 'pack' || G.mode === 'gift' ? 'pack' : G.mode === 'journey' && prevScreen === 'levels' ? 'levels' : 'home';
+  /** الخروج من المرحلة: التقدم محفوظ (زر «متابعة» بالرئيسية)، فما في داعي لنافذة تأكيد */
   function confirmQuit() {
-    if (engine.left === engine.total || engine.won) { show(exitTo()); return; }
-    modal(`<h3>🤔</h3><h3 style="font-size:20px">${t('quit')}</h3><p>${t('quitSub')}</p><div class="m-actions"><button class="btn primary" data-a="stay">${t('no')}</button><button class="btn" data-a="go">${t('home')}</button></div>`,
-      { stay: closeModal, go: () => { closeModal(); show(exitTo()); } });
+    if (!engine.won && !engine.over) runSave();
+    show(exitTo());
   }
+  $('h-resume').addEventListener('click', () => { Sound.unlock(); Sound.click(); resumeRun(); });
+  $('g-diff').addEventListener('click', () => { const id = $('g-diff').dataset.bomb; if (id != null) { Sound.click(); engine.focusArrow(+id); } });
 
   function onWin() {
     G.dailyNew = false;
+    runClear(); updateBombChip();
     Music.stop(); idleStop(); engine.calm();
     if (engine.zoomed) engine.fit(true);
     Sound.win(); vibrate([20, 40, 20, 40, 60]);
-    const stars = G.mode === 'zen' ? 3 : G.usedChance ? 1 : Math.max(1, 3 - engine.mistakes);
+    const stars = G.mode === 'zen' ? 3 : G.usedChance ? 1 : starsFor(engine.total, engine.mistakes);
     if (G.mode !== 'pack' && G.mode !== 'gift') S.pics[G.level.pic] = 1;
     const packId = G.mode === 'pack' ? Gen.packPics()[G.pk].id : G.mode === 'gift' ? G.gift.id : null;
     G.packFirst = !!packId && !S.pack[packId];
@@ -659,6 +835,7 @@
       earn.push([t('cFirst'), G.mode === 'journey' ? ECON.level : ECON.pack], [t('cStars'), stars * ECON.star]);
       if (engine.mistakes === 0) earn.push([t('cPerfect'), ECON.perfect]);
       if (streakCoins) earn.push([t('cStreak'), streakCoins]);
+      if (G.bombsOut) earn.push([t('cBombs'), G.bombsOut * ECON.bomb]);
     } else if (G.mode !== 'zen' && G.mode !== 'daily' && stars > prevStars) earn.push([t('cStars'), (stars - prevStars) * ECON.star]);
     if (G.mode === 'journey') {
       S.stars[G.n] = Math.max(S.stars[G.n] || 0, stars);
@@ -716,6 +893,8 @@
         <span title="${t('stMiss')}">${icon('i-x')}<b>${G.misses}</b></span>
         <span title="${t('stHints')}">${icon('i-bulb')}<b>${G.hintsUsed}</b></span>
         ${G.best >= 3 ? `<span title="${t('bestStreak')}">${icon('i-fire')}<b>${G.best}</b></span>` : ''}
+        ${G.zapBest >= 2 ? `<span class="zp" title="${t('stZap')}">⚡<b>×${G.zapBest}</b></span>` : ''}
+        ${G.bombsOut ? `<span title="${t('stBombs')}">💣<b>${G.bombsOut}</b></span>` : ''}
       </div>`;
     const path = G.mode === 'journey' ? `<div class="m-path">${[0, 1, 2, 3, 4].map(i => {
       const n = G.n + i, cls = i === 0 ? 'cur' : n < S.level ? 'done' : n === S.level ? 'next' : '';
@@ -764,14 +943,15 @@
   }
 
   function onLose() {
-    medalLose();
+    if (!G.resumedDead) medalLose();     // رجوع لجولة محفوظة خلصت قلوبها: الخسارة انحسبت من قبل
+    G.resumedDead = false;
     Music.stop(); idleStop();
     Sound.lose();
     const hp = ECON.heart * ((G.coinHearts || 0) + 1);
     const chance = !G.usedChance ? `<button class="btn heart" data-a="chance">${t('secondChance')}</button>`
       : (Ads.ready() && (G.adHearts || 0) < 3 ? `<button class="btn heart" data-a="adheart">${t('adHeart')}</button>` : '')
         + `<button class="btn heart ${S.coins < hp ? 'poor' : ''}" data-a="coinheart">${t('coinHeart').replace('{n}', `${icon('i-coin')} ${hp}`)}</button>`;
-    const resume = () => { closeModal(); engine.addHearts(1); updateHud(false, true); Music.start(G.style, G.seed); Music.setProgress(1 - engine.left / engine.total); idleArm(); };
+    const resume = () => { closeModal(); engine.addHearts(1); updateHud(false, true); updateBombChip(); setTimeout(runSave, 0); Music.start(G.style, G.seed); Music.setProgress(1 - engine.left / engine.total); idleArm(); };
     modal(`<h3>💔</h3><h3 style="font-size:22px">${t('loseTitle')}</h3><p>${t('loseSub')}</p><div class="m-actions">${chance}<button class="btn primary" data-a="retry">${t('tryAgain')}</button><button class="btn" data-a="home">${t('home')}</button></div>`,
       {
         chance: () => { G.usedChance = true; resume(); },
@@ -780,8 +960,8 @@
           if (S.coins < hp) { Sound.bump(); toast(t('notEnough').replace('{n}', hp - S.coins)); return; }
           S.coins -= hp; G.coinHearts = (G.coinHearts || 0) + 1; save(); coinUI(); Sound.coin(1); resume();
         },
-        retry: restart,
-        home: () => { closeModal(); show(exitTo()); },
+        retry: () => { restart(); Ads.afterWin(); },
+        home: () => { runClear(); closeModal(); show(exitTo()); Ads.afterWin(); },
       }, { locked: true });
   }
 
@@ -804,7 +984,7 @@
   const ECON = {
     level: 10, pack: 15, star: 5, perfect: 5, streakPer: 3, streakCap: 10, record: 5,
     daily: 50, dailyStreak: 10, freeHintEvery: 5, freeLensEvery: 4,
-    adCoins: 30, adCoinsPerDay: 5, heart: 60,
+    adCoins: 30, adCoinsPerDay: 5, heart: 60, bomb: 8,
     hints: { n: 3, p: 120 }, lenses: { n: 3, p: 100 },
   };
   const TRAIL_PRICE = [0, 0, 300, 500, 800, 1200, 1600, 2200];
@@ -918,7 +1098,14 @@
     modal(`<div class="cm-fx" id="cm-fx"></div><h3>${t('chest')}</h3>
       <div class="cm-stage" id="chest-big"><i class="cm-rays"></i><i class="cm-beam"></i>${chestSvg()}</div>
       <div class="cm-zone"><p class="cm-tap" id="cm-tap">${t('tapOpen')}</p><div class="cm-loot hidden" id="chest-loot"></div></div>
-      <div class="m-actions"><button class="btn primary hidden" data-a="ok">${t('collect')}</button></div>`, {
+      <div class="m-actions"><button class="btn ad-btn hidden" data-a="dbl">${t('chestDouble')}</button><button class="btn primary hidden" data-a="ok">${t('collect')}</button></div>`, {
+      dbl: () => Ads.reward('chest2', () => {
+        const extra = { c: r.c, h: r.h, l: r.l }; grant(extra);
+        const loot = $('chest-loot');
+        if (loot) loot.querySelectorAll('.cm-card b').forEach(el => { const m = /^\+(\d+)$/.exec(el.textContent.trim()); if (m) el.textContent = '+' + 2 * +m[1]; });
+        const b = document.querySelector('#modal [data-a=dbl]'); if (b) { b.disabled = true; b.textContent = t('adDoubleDone'); }
+        Sound.coins();
+      }),
       ok: () => { closeModal(); if (current === 'home') renderHome(); if (r.style) offerTry(r.style, after); else if (after) after(); },
     }, { locked: true, cls: ' chestm' });
     Sound.unlock();
@@ -960,7 +1147,8 @@
         });
         setTimeout(() => { Sound.reward(); }, 150);
         const ok = document.querySelector('#modal [data-a=ok]');
-        setTimeout(() => { if (ok) ok.classList.remove('hidden'); }, 250 + lootTiles(r).length * 200);
+        const dbl = document.querySelector('#modal [data-a=dbl]');
+        setTimeout(() => { if (ok) ok.classList.remove('hidden'); if (dbl && Ads.ready()) dbl.classList.remove('hidden'); }, 250 + lootTiles(r).length * 200);
       }, 480 + 650);
     };
     box.addEventListener('click', open);
@@ -980,14 +1168,14 @@
     { id: 'bolt', ic: '⚡', tiers: [1, 5, 20], v: () => mp('bolt') },
     { id: 'travel', ic: '🗺️', tiers: [50, 150, 300], v: () => S.level - 1 },
     { id: 'perfect', ic: '⭐', tiers: [30, 100, 250], v: () => Object.values(S.stars).filter(x => x >= 3).length },
-    { id: 'collect', ic: '🖼️', tiers: [10, 25, 0], v: () => picCount() + Gen.packPics().filter(p => S.pack[p.id]).length },
+    { id: 'collect', ic: '🖼️', tiers: [10, 25, 0], v: () => picCount() + Gen.packPics().filter(p => p.pack !== 'trend' && S.pack[p.id]).length },
     { id: 'owl', ic: '🌙', secret: 1, goal: 1, v: () => mp('owl') },
     { id: 'stubborn', ic: '💪', secret: 1, goal: 1, v: () => mp('stub') },
     { id: 'edge', ic: '❤️', secret: 1, goal: 10, v: () => mp('edge') },
     { id: 'dperf', ic: '👑', secret: 1, goal: 7, v: () => mp('dperf') },
     { id: 'legend', ic: '💎', legend: 1, goal: 8, v: () => MEDALS.filter(m => m.tiers && (S.med[m.id] || 0) >= 3).length },
   ];
-  const tiersOf = m => m.tiers.map(x => x || (Gen.mainPics().length + Gen.packPics().length));
+  const tiersOf = m => m.tiers.map(x => x || (Gen.journeyPics().length + Gen.packPics().filter(p => p.pack !== 'trend').length));
   const mName = m => (t('md')[m.id] || [m.id])[0];
   const mDesc = m => (t('md')[m.id] || ['', ''])[1];
   const tierName = tr => t('medalTiers')[tr - 1] || '';
@@ -1244,15 +1432,18 @@
     const idx = (S.login.last === yesterday() ? S.login.day : 0) % LOGIN.length;
     const lbl = r => r.chest ? icon('i-chest') : r.c ? `${icon('i-coin')}<b>${r.c}</b>` : `${r.h ? '💡' + r.h : ''}${r.l ? ' 🔍' + r.l : ''}`;
     modal(`<h3>🎁 ${t('loginTitle')}</h3><p>${t('loginSub')}</p><div class="login-grid">${LOGIN.map((r, i) => `<div class="ld ${i < idx ? 'got' : i === idx ? 'today' : ''} ${r.chest ? 'big' : ''}"><small>${t('loginDay').replace('{n}', i + 1)}</small><span>${lbl(r)}</span></div>`).join('')}</div>
-      <div class="m-actions"><button class="btn primary" data-a="claim">${t('claim')}</button></div>`, {
-      claim: () => {
-        S.login = { last: today(), day: idx + 1 };
-        const r = LOGIN[idx];
-        if (r.chest) { save(); openChest(true); return; }
-        const lines = grant(r);
-        closeModal(); Sound.reward(); toast(lines.join(' &nbsp; '), 2600, true); renderHome();
-      },
+      <div class="m-actions">${!LOGIN[idx].chest && Ads.ready() ? `<button class="btn ad-btn" data-a="claim2">${t('loginDouble')}</button>` : ''}<button class="btn primary" data-a="claim">${t('claim')}</button></div>`, {
+      claim: () => claimLogin(1),
+      claim2: () => Ads.reward('login2', () => claimLogin(2)),
     }, { locked: true });
+    function claimLogin(k) {
+      if (S.login.last === today()) return;
+      S.login = { last: today(), day: idx + 1 };
+      const r = LOGIN[idx];
+      if (r.chest) { save(); openChest(true); return; }
+      const lines = grant({ c: r.c && r.c * k, h: r.h && r.h * k, l: r.l && r.l * k });
+      closeModal(); Sound.reward(); toast(lines.join(' &nbsp; '), 2600, true); renderHome();
+    }
   }
 
   // ——— المتجر ———
@@ -1335,6 +1526,7 @@
     o.today = a.today && b.today && a.today.d === b.today.d ? { d: a.today.d, n: Math.max(a.today.n, b.today.n) } : newer(a.today, b.today, 'd');
     o.wk = a.wk && b.wk && a.wk.id === b.wk.id ? { id: a.wk.id, s: Math.max(a.wk.s, b.wk.s) } : newer(a.wk, b.wk, 'id');
     o.seen = Object.assign({}, b.seen, a.seen);
+    o.lvPic = Object.assign({}, b.lvPic, a.lvPic);
     o.med = mx(a.med, b.med); o.mp = Object.assign({}, b.mp, a.mp);
     for (const k in (b.mp || {})) if (typeof b.mp[k] === 'number' && typeof (a.mp || {})[k] === 'number') o.mp[k] = Math.max(a.mp[k], b.mp[k]);
     o.prof = ((b.prof && b.prof.t) || 0) > ((a.prof && a.prof.t) || 0) ? b.prof : a.prof;
@@ -1415,7 +1607,7 @@
         no: () => accountModal(),
         yes: async () => {
           await cloudPush();
-          const set = S.set, gf = S.gifts; S = fresh(); S.set = set; S.gifts = gf; S.prof.a = Math.floor(Math.random() * 24);
+          const set = S.set, gf = S.gifts; S = fresh(); S.set = set; S.gifts = gf; S.prof.a = Math.floor(Math.random() * 24); runClear();
           cloudUid = null; lastPub = '';
           try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignore */ }
           await Cloud.signOut().catch(() => {});
@@ -1437,7 +1629,7 @@
             run(async () => {
               await Cloud.reauth(pw);
               await Cloud.deleteAccount();
-              const set = S.set, gf = S.gifts; S = fresh(); S.set = set; S.gifts = gf; S.prof.a = Math.floor(Math.random() * 24);
+              const set = S.set, gf = S.gifts; S = fresh(); S.set = set; S.gifts = gf; S.prof.a = Math.floor(Math.random() * 24); runClear();
               cloudUid = null; lastPub = '';
               try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignore */ }
               await Cloud.signOut().catch(() => {});
@@ -1537,9 +1729,10 @@
   document.addEventListener('visibilitychange', () => { if (document.hidden && cloudOn) { clearTimeout(cloudT); cloudPush(); } });
 
   // للاختبار
-  window.__siham = { engine, G, S: () => S, startLevel, startDaily, startZen, idleNudge, startPack, startGift, decodeGift, openChest, maybeLogin, show, accountModal, mergeSave };
+  window.__siham = { engine, G, S: () => S, runLoad, runClear, resumeRun, startLevel, startDaily, startZen, idleNudge, startPack, startGift, decodeGift, openChest, maybeLogin, show, accountModal, mergeSave };
 
   applyI18n(); applyTheme(); applyStyle(); show('home');
   checkGift();
+  setTimeout(trendRefresh, 1500);
   window.addEventListener('hashchange', checkGift);
 })();

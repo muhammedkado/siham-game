@@ -740,3 +740,25 @@ body[data-theme="night"] .md-card.got.t3,body[data-theme="dark"] .md-card.got.t3
 .medalm .md-rar{color:#ffe9a8}
 .md-rows .rar{font-style:normal;font-size:11px;font-weight:700;color:var(--sub);margin-inline-start:6px;opacity:.85}
 .mdinfo .m-actions .btn.on{opacity:.75}
+
+/* ——— v3.13: متابعة المرحلة، عدّاد القنبلة، بطاقة العنصر الجديد ——— */
+.resume-pill{display:flex;align-items:center;gap:8px;width:100%;margin:0 0 10px;padding:8px 14px 8px 10px;border-radius:999px;background:var(--glass);border:2px solid color-mix(in srgb,var(--ok) 55%,transparent);box-shadow:var(--shadow);font:inherit;font-size:15px;font-weight:800;color:var(--ink);cursor:pointer;animation:fadeIn .3s ease}
+.resume-pill.hidden{display:none}
+.resume-pill .rp-ic{flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--ok);color:#fff;font-style:normal;font-size:12px}
+[dir=rtl] .resume-pill .rp-ic{transform:scaleX(-1)}
+.resume-pill span{flex:1;min-width:0;text-align:start;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.resume-pill b{flex:none;color:var(--ok)}
+.resume-pill:active{transform:scale(.97)}
+.chip.bomb{background:#1c1b2e;border-color:#ff4d67;color:#fff;cursor:pointer;gap:5px}
+.chip.bomb b{color:#fff;font-size:17px}
+.chip.bomb.hot{background:#e11d48;border-color:#fff;animation:bombPulse .45s ease-in-out infinite alternate}
+@keyframes bombPulse{to{transform:scale(1.1)}}
+.modal-card.newel{position:relative;overflow:hidden}
+.ne-tag{display:inline-block;font-size:13px;font-weight:800;color:#fff;background:linear-gradient(135deg,#ef4444,#ff8a3d);border-radius:999px;padding:2px 14px;margin-bottom:6px}
+.ne-ic{width:112px;height:112px;margin:6px auto 10px;border-radius:50%;display:grid;place-items:center;position:relative;animation:bob 2.4s ease-in-out infinite}
+.ne-ic svg{width:64px;height:64px}
+.ne-ic.bolt{background:radial-gradient(circle at 35% 30%,#fffbe6,#ffd21f 60%,#f5a800);box-shadow:0 0 0 6px rgba(255,210,31,.28),0 12px 30px rgba(245,168,0,.45)}
+.ne-ic.bomb{background:radial-gradient(circle at 35% 30%,#4b4a6b,#1c1b2e 65%);box-shadow:0 0 0 6px rgba(255,77,103,.3),0 12px 30px rgba(225,29,72,.4);color:#fff;font:800 52px/1 "Baloo",system-ui,sans-serif}
+.ne-ic.bomb::after{content:"";position:absolute;top:-4px;inset-inline-end:14px;width:16px;height:16px;border-radius:50%;background:#ffb703;box-shadow:0 0 12px 4px rgba(255,183,3,.7);animation:pulseDot 0.7s infinite}
+.modal-card.newel p{font-size:15.5px;line-height:1.6;color:var(--ink)}
+.m-chips span.zp{color:#e08a00;font-weight:800}

@@ -154,6 +154,38 @@
       noise(sfxBus, t, 0.08, 0.12, 'lowpass', 800);
     },
     click() { if (sfxOn && ac()) voice(sfxBus, 900, ctx.currentTime, 0.04, 'sine', 0.06); },
+    /** سهم برق انطلق لحاله: أزيز كهربا بيعلى مع كل سهم بالسلسلة */
+    zap(n) {
+      if (!sfxOn || !ac()) return; const t = ctx.currentTime, f = 700 * Math.pow(1.14, Math.min(8, n || 1));
+      voice(sfxBus, f, t, 0.13, 'sawtooth', 0.06, { slideTo: f * 2.4, filter: 5200 });
+      voice(sfxBus, f * 1.5, t + 0.03, 0.1, 'square', 0.03, { slideTo: f * 3, filter: 6000 });
+      noise(sfxBus, t, 0.09, 0.07, 'highpass', 5200);
+    },
+    /** القنبلة اشتعلت */
+    ignite() {
+      if (!sfxOn || !ac()) return; const t = ctx.currentTime;
+      noise(sfxBus, t, 0.4, 0.14, 'bandpass', 3200);
+      voice(sfxBus, 196, t, 0.16, 'square', 0.08, { filter: 1600 });
+      voice(sfxBus, 262, t + 0.16, 0.22, 'square', 0.08, { filter: 1600 });
+    },
+    /** تكّة عدّاد القنبلة بآخر 3 حركات */
+    tick(n) {
+      if (!sfxOn || !ac()) return; const t = ctx.currentTime + 0.1, f = n <= 1 ? 1568 : 1175;
+      voice(sfxBus, f, t, 0.05, 'square', 0.07, { filter: 4500 });
+      voice(sfxBus, f, t + 0.1, 0.05, 'square', 0.07, { filter: 4500 });
+      if (n <= 1) voice(sfxBus, f, t + 0.2, 0.05, 'square', 0.07, { filter: 4500 });
+    },
+    boom() {
+      if (!sfxOn || !ac()) return; const t = ctx.currentTime;
+      noise(sfxBus, t, 0.55, 0.5, 'lowpass', 520);
+      noise(sfxBus, t, 0.18, 0.22, 'highpass', 2400);
+      voice(sfxBus, 130, t, 0.5, 'sine', 0.5, { slideTo: 34 });
+      voice(sfxBus, 70, t + 0.03, 0.4, 'triangle', 0.3, { slideTo: 30 });
+    },
+    defuse() {
+      if (!sfxOn || !ac()) return; const t = ctx.currentTime + 0.05;
+      [12, 19, 24].forEach((s2, i) => voice(sfxBus, mtof(key + s2), t + i * 0.08, 0.3, 'triangle', 0.1));
+    },
     hint() {
       if (!sfxOn || !ac()) return; const t = ctx.currentTime;
       voice(sfxBus, mtof(key + 19), t, 0.2, 'sine', 0.1);

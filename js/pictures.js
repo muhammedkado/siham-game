@@ -538,6 +538,8 @@
     const key = pic.id + '|' + size + '|' + (mirror ? 1 : 0) + (soft ? '|s' : '');
     if (rasterCache[key]) return rasterCache[key];
     if (pic.grid) return (rasterCache[key] = fromGrid(pic.grid, mirror));
+    // خرائط الترند المحوّلة من صور: كذا نسخة بعروض مختلفة، نختار الأقرب لحجم المرحلة
+    if (pic.grids) return (rasterCache[key] = fromGrid(pic.grids.reduce((a, g) => Math.abs(g.W - size) < Math.abs(a.W - size) ? g : a), mirror));
     if (!pic.shapes) return null;
     const [VW0, VH0] = pic.view || [100, 100];
     const shapes = pic.shapes.map(prep);
@@ -649,7 +651,7 @@
     if (!cv) return null;
     const g = cv.getContext('2d');
     cv._cbs = onReady ? [onReady] : [];
-    if (pic.grid) {
+    if (pic.grid || pic.grids) {
       if (!pic.hd) return null;
       const draw = im => {
         g.save(); if (mirror) { g.translate(cv.width, 0); g.scale(-1, 1); }
@@ -658,7 +660,7 @@
       };
       hdCache[key] = cv;
       let im = hdImgs[pic.id];
-      if (!im) { im = hdImgs[pic.id] = new Image(); im._cbs = []; im.onload = () => { im._ok = true; im._cbs.forEach(f => f()); im._cbs = []; }; im.src = pic.hd; }
+      if (!im) { im = hdImgs[pic.id] = new Image(); im._cbs = []; im.onload = () => { im._ok = true; im._cbs.forEach(f => f()); im._cbs = []; }; if (/^https?:/.test(pic.hd)) im.crossOrigin = 'anonymous'; im.src = pic.hd; }
       if (im._ok) draw(im); else im._cbs.push(() => draw(im));
       return cv;
     }

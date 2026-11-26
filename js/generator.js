@@ -31,7 +31,7 @@
 
   /** يحوّل اللوحة إلى رقعة: لوحات الأشكال تُرسم بعرض size خانة، ولوحات البكسل اليدوي تُكبَّر بالمعامل size */
   function buildBoard(pic, size, mirror, soft) {
-    if (pic.shapes || pic.grid) return PICS.rasterize(pic, Math.max(6, Math.round(size)), mirror, soft);
+    if (pic.shapes || pic.grid || pic.grids) return PICS.rasterize(pic, Math.max(6, Math.round(size)), mirror, soft);
     const f = size;
     const th = pic.art.length;
     const tw = Math.max.apply(null, pic.art.map(r => r.length));
@@ -172,7 +172,9 @@
             for (const c of p.ray) if (mask[c] && occ[c] < 0 && !own.has(c)) open++;
             if (cap === params.cap && !open && free.length - hit.size >= 1) continue;   // حر للأبد + في غيره حر = ممنوع
             // الأفضل: يسد كل الحرّين (يبقى هو الحر الوحيد)، وطريقه قابل للسد، وبعدين الأطول
-            const sc = hit.size * 10 - (free.length - hit.size) * 25 - (open ? 0 : 60) + Math.min(open, 12) * 1.5 + p.cells.length * 0.3 + R() * 2;
+            // aim: عدد الأسهم الحرة المطلوب بكل لحظة (للمراحل الأولى: الصعوبة بتطلع درجة درجة بدل ما تنط)
+            const sc = (params.aim ? -Math.abs(free.length - hit.size + 1 - params.aim) * 25 : hit.size * 10 - (free.length - hit.size) * 25)
+              - (open ? 0 : 60) + Math.min(open, 12) * 1.5 + p.cells.length * 0.3 + R() * 2;
             tried++;
             if (!best || sc > best.sc) best = { sc, p, d };
           }
@@ -363,6 +365,67 @@
     return { avg: sum / steps, max, tight: ones / steps };
   }
 
+  /* ——— العناصر الخاصة (v3.13) ———
+   * برق ⚡: سهم بينطلق لحاله أول ما يفضى طريقه (تفاعلات متسلسلة).
+   * قنبلة 💣: سهم عليه عدّاد حركات؛ لازم يطلع قبل الصفر وإلا بيروح قلب.
+   * ولا واحد منهم بيغيّر قابلية الحل: العدّاد (بيحسبه المحرك لحظة الاشتعال) = عدد الأسهم يلي لازم تطلع قبل القنبلة × هامش. */
+  function decorate(level, spec) {
+    const { W, H, arrows } = level, n = arrows.length;
+    if (!(spec.bolt || spec.bombs) || n < 8) return;
+    const R = rng((spec.seed ^ 0x9e3779b9) >>> 0);
+    const occ = new Int32Array(W * H).fill(-1);
+    arrows.forEach(a => a.cells.forEach(c => { occ[c] = a.id; }));
+    // مين سادد طريق مين: كل الأسهم يلي عالطريق، مو بس الأول
+    const blk = arrows.map(a => {
+      const s = new Set(), h = a.cells[a.cells.length - 1], [dx, dy] = DIRS[a.dir];
+      for (let x = h % W + dx, y = ((h / W) | 0) + dy; x >= 0 && y >= 0 && x < W && y < H; x += dx, y += dy) { const o = occ[y * W + x]; if (o >= 0 && o !== a.id) s.add(o); }
+      return s;
+    });
+    const dep = arrows.map(() => []);          // مين بيتحرر لما يطلع هالسهم
+    blk.forEach((s, i) => s.forEach(b => dep[b].push(i)));
+    const memo = new Map();
+    const anc = i => {                          // كل الأسهم يلي لازم تطلع قبله
+      let s = memo.get(i); if (s) return s;
+      s = new Set(); const st = [...blk[i]];
+      while (st.length) { const b = st.pop(); if (s.has(b)) continue; s.add(b); for (const c of blk[b]) if (!s.has(c)) st.push(c); }
+      memo.set(i, s); return s;
+    };
+    const kind = new Array(n).fill(null);
+    if (spec.bombs) {
+      // القنبلة نايمة لحد ما يقرب دورها (المحرك بيشعّلها لما يضل قدامها fuseK أسهم أو أقل)، فكل قنبلة
+      // بتنختار بعمق مختلف حتى يشتعلوا بأوقات مختلفة من المرحلة. مرحلة التعريف: قنبلة قريبة مشتعلة من البداية.
+      const want = spec.bombs + (spec.boss && n >= 150 ? 1 : 0);
+      const cand = arrows.filter(a => a.cells.length >= 3 && blk[a.id].size > 0).map(a => ({ i: a.id, d: anc(a.id).size }));
+      for (let j = 0; j < want && cand.length; j++) {
+        const goal = spec.bombNear ? spec.bombNear : Math.max(4, n * 0.75 * (j + 0.5) / want);
+        cand.sort((x, y) => Math.abs(x.d - goal) - Math.abs(y.d - goal));
+        const c = cand.splice(Math.floor(R() * Math.min(3, cand.length)), 1)[0];
+        arrows[c.i].kind = 'bomb'; kind[c.i] = 'bomb';
+      }
+    }
+    if (spec.bolt) {
+      const target = Math.max(2, Math.min(40, Math.round(n * spec.bolt)));
+      // مسدود من البداية (وإلا بينطلق أول ما تفتح المرحلة) وطوله خانتين عالأقل حتى تبين علامته
+      const ok = i => !kind[i] && blk[i].size > 0 && arrows[i].cells.length >= 2;
+      const pool = shuffle(arrows.map(a => a.id).filter(ok), R);
+      let cnt = 0;
+      for (const s0 of pool) {
+        if (cnt >= target) break;
+        if (kind[s0]) continue;
+        let cur = s0; kind[cur] = 'bolt'; cnt++;
+        // سلسلة: السهم يلي بيتحرر بطلوع هاد كمان برق ← تفاعل متسلسل
+        const others = i => { let k = 0; blk[i].forEach(b => { if (kind[b] !== 'bolt') k++; }); return k; };
+        while (cnt < target && R() < (spec.boltChain || 0.65)) {
+          // الأضمن ينطلق فوراً: يلي كل سدّاداته برق كمان، وبعدين الأقل سدّادات
+          const nx = shuffle(dep[cur].filter(ok), R).sort((a, b) => others(a) - others(b))[0];
+          if (nx == null) break;
+          kind[nx] = 'bolt'; cnt++; cur = nx;
+        }
+      }
+      arrows.forEach(a => { if (kind[a.id] === 'bolt') a.kind = 'bolt'; });
+    }
+  }
+
   function makeLevel(spec) {
     const pic = spec.board ? null : (PICS.PICTURES.find(p => p.id === spec.pic) || PICS.PICTURES[0]);
     let board = spec.board || buildBoard(pic, spec.w || spec.f, spec.mirror, spec.gem);
@@ -381,9 +444,10 @@
       const fillRatio = covered / cellsInMask;
       const freeRatio = an.firstFree / arrows.length;
       let score = fillRatio * 2 - freeRatio + an.layers * 0.02;
-      if (spec.chain) { const pr = pressure(lvl, seed); score = fillRatio * 2 - pr.avg * 0.6 + pr.tight; }
+      if (spec.chain) { const pr = pressure(lvl, seed); score = spec.aim ? fillRatio * 2 - Math.abs(pr.avg - spec.aim) * 0.6 : fillRatio * 2 - pr.avg * 0.6 + pr.tight; }
       if (!best || score > best.score) best = { score, arrows, fillRatio, an };
     }
+    decorate({ W: board.W, H: board.H, arrows: best.arrows }, spec);
     return {
       W: board.W, H: board.H, mask: board.mask, color: board.color, fixed: board.fixed,
       arrows: best.arrows, pic: pic ? pic.id : spec.id, picName: pic ? pic.name : spec.name, art: !!spec.art, gem: !!spec.gem, skin: spec.skin || 0,
@@ -393,6 +457,13 @@
 
   // ——— تقدّم المراحل ———
   function mainPics() { return PICS.mainPics(); }
+  // خرائط الترند: كل لاعب بتنحط الخريطة الجديدة بأول مرحلة جاية إلو (الواجهة بتحفظ {رقم المرحلة: معرّف اللوحة})
+  let levelPics = () => null;
+  function setLevelPics(fn) { levelPics = typeof fn === 'function' ? fn : () => fn; }
+  function levelPic(n) {
+    const m = levelPics(), id = m && m[n];
+    return id ? PICS.PICTURES.find(p => p.id === id) || null : null;
+  }
 
   function difficultyOf(cells) {
     if (cells < 90) return 'easy';
@@ -411,19 +482,36 @@
     };
   }
 
+  // لوحات الرحلة: الكلاسيكية + حيوانات الحزم المرسومة بالأشكال (بتتكبّر لأي حجم؛ لوحات الصور حجمها ثابت،
+  // والأبراج الطويلة بتطلع أطول من الشاشة). أول 21 بنفس ترتيبها القديم، فالمراحل 4–24 ما بتتغير.
+  function journeyPics() { return PICS.mainPics().concat(PICS.packPics('animals').filter(p => p.shapes && (p.ratio || 1.4) <= 1.5)); }
+  const roundCache = {};
+  /** لوحة المرحلة: الدورة الأولى بالترتيب، وكل دورة بعدها بترتيب مخلوط مختلف (كي ما يحفظ اللاعب التسلسل) */
+  function journeyPic(k) {
+    const pics = journeyPics(), m = pics.length, round = Math.floor(k / m);
+    if (!round) return pics[k % m];
+    const key = round + ':' + m;
+    const ord = roundCache[key] || (roundCache[key] = shuffle(pics.map((_, i) => i), rng(hashStr('siham-round-' + round))));
+    return pics[ord[k % m]];
+  }
+
   /* منحنى الصعوبة (v3.8): المقياس الحقيقي للصعوبة هو كم سهم بيقدر يتحرك بكل لحظة.
    * القديم كان ~10 أسهم حرة دائماً (اللاعب بيكبس أي شي). هلق:
-   * 4–7 دافئة (توتر خفيف) ← 8–19 صعبة (سقف 4) ← 20–49 خبير (سقف 3) ← 50+ سقف 2،
-   * وكل مرحلة عاشرة "زعيم": سقف 2 صارم ورقعة أكبر. والرقعة نفسها بتكبر مع التقدّم لحد 36 خانة. */
+   * 4–7 دافئة (توتر خفيف) ← 8–19 بتشدّ درجة درجة (aim: 4 ← 3 ← 2 أسهم حرة) ← 20–49 (سقف 3) ← 50+ سقف 2،
+   * وكل مرحلة عاشرة "زعيم": سقف 2 صارم ورقعة أكبر. والرقعة نفسها بتكبر مع التقدّم لحد 36 خانة.
+   * v3.13: عناصر جديدة — برق ⚡ من المرحلة 12 وقنبلة 💣 من المرحلة 25 (كل وحدة بمرحلة تعريف سهلة). */
+  const BOLT_FROM = 12, BOMB_FROM = 25;
+  // القنبلة بتشتعل لما يضل قدامها FK أسهم، والعدّاد = (يلي لازم يطلع قبلها + هي) × FS + FE.
+  // بالمحاكاة (40 جولة × 18 مرحلة): لعب عشوائي بينفجر 35% من القنابل، لاعب منتبه 3%، والحل المثالي 0%.
+  const FK = 5, FS = 1.6, FE = 4, FS_BOSS = 1.4, FE_BOSS = 3;
   function levelSpec(n) {
     const seed = hashStr('siham-level-' + n);
     if (n === 1) return { n, pic: 'gem', f: 1, minLen: 2, maxLen: 3, straight: 0.8, seed, tries: 6, diff: 'easy' };
     if (n === 2) return { n, pic: 'leaf', f: 1, minLen: 2, maxLen: 4, straight: 0.6, seed, tries: 6, diff: 'easy' };
     if (n === 3) return { n, pic: 'smile', f: 1, minLen: 2, maxLen: 5, straight: 0.6, seed, tries: 6, diff: 'easy' };
-    const pics = mainPics();
     const k = n - 4;
-    const round = Math.floor(k / pics.length);
-    const pic = pics[k % pics.length];
+    const round = Math.floor(k / journeyPics().length);
+    const pic = levelPic(n) || journeyPic(k);
     const boss = n >= 10 && n % 10 === 0;
     // الرقعة بتكبر تدريجياً: 14 ← 36 خانة لحد المرحلة 65، وبعدها أبطأ لحد 48 خانة (المرحلة ~200)
     let w = k <= 61 ? 14 + k * 0.36 : 36 + (k - 61) * 0.09;
@@ -431,17 +519,33 @@
     w = Math.min(48, Math.round(w));
     if (boss) w = Math.min(50, w + 3);
     const base = Object.assign({ n, pic: pic.id, w, mirror: round % 2 === 1, seed }, arrowParams(w, k));
-    if (n < 8) return Object.assign(base, { tension: 2, inside: 2, diff: 'normal' });
-    // سلسلة (قليل أسهم حرة) + سدّ الفراغات (الرسمة بتتعبى وعدد الأسهم بيكبر كتير مع المراحل)
-    const chain = { chain: w > 38 ? 60 : 30, plug: true, tension: 2, inside: 2, tries: w > 30 ? 3 : 4 };
-    if (boss) return Object.assign(base, chain, { cap: 2, relax: 4, maxExt: 12, plugLen: 5, boss: true, diff: 'insane' });
-    if (n < 20) return Object.assign(base, chain, { cap: 4, relax: 8, maxExt: 14, plugLen: 7, diff: 'hard' });
-    // منشار الصعوبة (متل المنافسين): أول مرحلتين بعد الزعيم استراحة، و7–9 قبل الزعيم أصعب
     const pos = n % 10;
-    if (pos === 1 || pos === 2) { const bw = Math.max(18, w - 6); return Object.assign(base, arrowParams(bw, k), { w: bw, tension: 2, inside: 2, diff: 'normal' }); }
-    if (pos >= 7) return Object.assign(base, chain, { w: Math.min(48, w + 2), cap: 2, relax: 4, maxExt: 12, plugLen: 5, diff: 'expert' });
-    if (n < 50) return Object.assign(base, chain, { cap: 3, relax: 6, maxExt: 14, plugLen: 6, diff: 'expert' });
-    return Object.assign(base, chain, { cap: 2, relax: 6, maxExt: 12, plugLen: 5, diff: 'expert' });
+    const pick = () => {
+      if (n < 8) return Object.assign(base, { tension: 2, inside: 2, diff: 'normal' });
+      // مراحل التعريف بالعناصر الجديدة: سهلة وبدون سلسلة، والعنصر الجديد واضح فيها
+      if (n === BOLT_FROM) return Object.assign(base, { tension: 2, inside: 2, diff: 'normal', intro: 'bolt', bolt: 0.22, boltChain: 0.85 });
+      if (n === BOMB_FROM) return Object.assign(base, { tension: 2, inside: 2, diff: 'normal', intro: 'bomb', bombs: 1, bombNear: 3, fuseK: 4, fuseSlack: 2.2, fuseExtra: 6, bolt: 0.08 });
+      // سلسلة (قليل أسهم حرة) + سدّ الفراغات (الرسمة بتتعبى وعدد الأسهم بيكبر كتير مع المراحل)
+      const chain = { chain: w > 38 ? 60 : 30, plug: true, tension: 2, inside: 2, tries: w > 30 ? 3 : 4 };
+      if (boss && n < 20) return Object.assign(base, chain, { cap: 3, aim: 2, relax: 6, maxExt: 12, plugLen: 5, boss: true, diff: 'expert' });
+      if (boss) return Object.assign(base, chain, { cap: 2, relax: 4, maxExt: 12, plugLen: 5, boss: true, diff: 'insane' });
+      // 8–19: بدل القفزة المفاجئة (من ~5 أسهم حرة لـ ~2)، بتنزل درجة كل 4 مراحل
+      if (n < 20) { const aim = n < 12 ? 4 : n < 16 ? 3 : 2; return Object.assign(base, chain, { cap: aim + 1, aim, relax: 8, maxExt: 14, plugLen: 7, diff: n < 12 ? 'normal' : 'hard' }); }
+      // منشار الصعوبة (متل المنافسين): أول مرحلتين بعد الزعيم استراحة، و7–9 قبل الزعيم أصعب
+      if (pos === 1 || pos === 2) { const bw = Math.max(18, w - 6); return Object.assign(base, arrowParams(bw, k), { w: bw, tension: 2, inside: 2, diff: 'normal' }); }
+      if (pos >= 7) return Object.assign(base, chain, { w: Math.min(48, w + 2), cap: 2, relax: 4, maxExt: 12, plugLen: 5, diff: 'expert' });
+      if (n < 50) return Object.assign(base, chain, { cap: 3, relax: 6, maxExt: 14, plugLen: 6, diff: 'hard' });
+      return Object.assign(base, chain, { cap: 2, relax: 6, maxExt: 12, plugLen: 5, diff: 'expert' });
+    };
+    const sp = pick();
+    if (sp.intro) return sp;
+    // البرق: بأغلب المراحل بعد التعريف (5–9% من الأسهم). القنبلة: بالزعماء دائماً، وبنص المراحل العادية (مو باستراحة ما بعد الزعيم)
+    if (n > BOLT_FROM) { const r = (seed >>> 3) % 10; if (sp.boss) sp.bolt = 0.05; else if (r < 7) sp.bolt = 0.05 + (r % 3) * 0.02; }
+    if (n > BOMB_FROM) {
+      if (sp.boss) Object.assign(sp, { bombs: 2, fuseK: FK, fuseSlack: FS_BOSS, fuseExtra: FE_BOSS });
+      else if (pos >= 3 && (seed >>> 7) % 2 === 0) Object.assign(sp, { bombs: 1, fuseK: FK, fuseSlack: FS, fuseExtra: FE });
+    }
+    return sp;
   }
 
   function dailySpec(dateStr) {
@@ -476,11 +580,12 @@
   const gemParams = () => ({ inside: 1.5, minLen: 2, maxLen: 2, straight: 1, straightOnly: true, lenBias: 1, lock: true, single: true, art: true, gem: true, maxExt: 2, singleFrom: 0 });
   // الحزمة: الحيوانات أولاً ثم كل لوحات الرحلة، كلها بالأسلوب اللامع
   const PACKS = ['animals', 'sea', 'sweets'];
-  function packPics() { return PACKS.reduce((a, k) => a.concat(PICS.packPics(k)), []).concat(PICS.mainPics()); }
+  // الترند بآخر القائمة (بتنعرض أول شي بالشاشة): هيك الخرائط الجديدة ما بتغيّر أرقام اللوحات القديمة
+  function packPics() { return PACKS.reduce((a, k) => a.concat(PICS.packPics(k)), []).concat(PICS.mainPics(), PICS.packPics('trend')); }
   /** أقسام شاشة اللوحات: [{key, start, count}] */
   function packGroups() {
     const out = []; let i = 0;
-    for (const k of PACKS.concat(['classic'])) { const n = k === 'classic' ? PICS.mainPics().length : PICS.packPics(k).length; out.push({ key: k, start: i, count: n }); i += n; }
+    for (const k of PACKS.concat(['classic', 'trend'])) { const n = k === 'classic' ? PICS.mainPics().length : PICS.packPics(k).length; out.push({ key: k, start: i, count: n }); i += n; }
     return out;
   }
   // عرض اللوحة: أكبر شي لحد 18 خانة بشرط ما تزيد الخانات عن ~300 (كي ما يصير عدد الأسهم كبير كتير)
@@ -502,7 +607,7 @@
     return Object.assign({ custom: g.id, id: g.id, name: { ar: g.name, en: g.name }, board: g.board, seed: hashStr('siham-gift-' + g.id), tries: 3, love: true }, artParams(g.board.W));
   }
 
-  const api = { DIRS, rng, hashStr, buildBoard, fill, firstBlock, analyze, pressure, makeLevel, levelSpec, dailySpec, dailyIndex, zenSpec, difficultyOf, mainPics, packPics, packGroups, packBoard, packSpec, customSpec };
+  const api = { DIRS, rng, hashStr, buildBoard, fill, firstBlock, analyze, pressure, makeLevel, decorate, journeyPics, BOLT_FROM, BOMB_FROM, levelSpec, dailySpec, dailyIndex, zenSpec, difficultyOf, mainPics, setLevelPics, levelPic, packPics, packGroups, packBoard, packSpec, customSpec };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Gen = api;
 })(typeof window !== 'undefined' ? window : globalThis);
